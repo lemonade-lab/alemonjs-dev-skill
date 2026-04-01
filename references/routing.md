@@ -1,153 +1,67 @@
-# ALemonJS 路由参考
+# AlemonJS 路由参考
+
+本文仅覆盖路由匹配与执行规则，不重复 hooks 和事件字段。
 
 ## defineRouter
-
-声明式路由系统，支持正则匹配、前缀匹配、精确匹配和嵌套子路由。
 
 ```typescript
 import { defineRouter, lazy } from 'alemonjs';
 
 const router = defineRouter([
   {
-    // 匹配条件（可组合，按优先级依次检查）
-    exact?: string,        // 精确匹配，O(1)，最快
-    prefix?: string,       // 前缀匹配，O(n)
-    regular?: RegExp,      // 正则匹配，自动缓存编译结果
-
-    // 事件类型过滤
+    exact?: string,
+    prefix?: string,
+    regular?: RegExp,
     selects?: EventKeys | EventKeys[],
-
-    // 处理器（必须使用 lazy 懒加载）
     handler: lazy(() => import('./response/xxx')),
-
-    // 嵌套子路由（可选）
     children?: ResponseRoute[]
   }
 ]);
 ```
 
-## lazy 懒加载
+## 匹配顺序
 
-`lazy` 函数将 `import()` 包装为惰性加载，首次匹配时才加载模块，后续复用缓存：
+单节点内部：
+1. `exact`
+2. `prefix`
+3. `regular`
 
-```typescript
-import { lazy } from 'alemonjs';
+节点之间：按数组顺序，先匹配先执行。
 
-// ✅ 正确：使用 lazy 包装动态 import
-handler: lazy(() => import('./response/hello'));
+## 执行顺序
 
-// ❌ 错误：直接使用 import（立即加载全部模块）
-handler: () => import('./response/hello');
-```
+`middlewareRouter -> responseRouter`
 
-`lazy` 要求目标模块必须有 `export default`。
+中间件约定：
+- `return true`：继续到下一个节点
+- `return void/false`：终止
 
-## 匹配优先级
+## lazy 约束
 
-对于同一个路由节点内的匹配条件，检查顺序为：
-
-```
-1. exact  (字符串相等比较)  → 不匹配则跳过
-2. prefix (startsWith)     → 不匹配则跳过
-3. regular (正则 test)     → 不匹配则跳过
-```
-
-路由节点本身按数组顺序遍历，**先匹配先执行**。
+- handler 必须使用 `lazy(() => import(...))`
+- 目标模块必须 `export default`
 
 ## 嵌套路由
 
-子路由会继承父路由的中间件链：
+父节点匹配后再进入 children，常用于：
+- 统一鉴权
+- 管理命令分组
+
+## 推荐 handler 模式
 
 ```typescript
-defineRouter([
-  {
-    prefix: '/admin',
-    selects: ['message.create'],
-    handler: lazy(() => import('./middleware/admin-auth')),
-    children: [
-      {
-        exact: '/admin ban',
-        handler: lazy(() => import('./response/admin-ban'))
-      },
-      {
-        exact: '/admin kick',
-        handler: lazy(() => import('./response/admin-kick'))
-      }
-    ]
-  }
-]);
-```
-
-执行流程：
-
-1. 匹配 `/admin` 前缀 → 执行 `admin-auth` handler
-2. `admin-auth` return true → 进入 children
-3. 匹配 children 中的 exact → 执行对应 handler
-
-## 路由与中间件分离
-
-`register()` 可以同时返回 `responseRouter` 和 `middlewareRouter`：
-
-```typescript
-export default defineChildren({
-  register() {
-    return {
-      responseRouter: defineRouter([
-        /* 响应路由 */
-      ]),
-      middlewareRouter: defineRouter([
-        /* 中间件路由 */
-      ])
-    };
-  }
-});
-```
-
-**执行顺序**：middlewareRouter → responseRouter
-
-### 语义化别名
-
-`defineResponse` 和 `defineMiddleware` 与 `defineRouter` 签名完全相同，仅用于语义化区分：
-
-```typescript
-import { defineResponse, defineMiddleware } from 'alemonjs';
-
-// 等价于 defineRouter([...])
-const responseRouter = defineResponse([...]);
-const middlewareRouter = defineMiddleware([...]);
-```
-
-## ResponseRoute 完整类型
-
-```typescript
-type ResponseRoute = {
-  regular?: RegExp; // 正则匹配
-  prefix?: string; // 前缀匹配
-  exact?: string; // 精确匹配
-  selects?: EventKeys | EventKeys[]; // 事件类型
-  handler: () => Promise<any>; // 处理器（通过 lazy 包装）
-  children?: ResponseRoute[]; // 子路由
-};
-```
-
-## handler 文件约定
-
-每个 handler 文件必须 `export default` 一个函数：
-
-```typescript
-// 推荐签名（无参，通过 AsyncLocalStorage 自动获取上下文）
 export default async () => {
   const [event, next] = useEvent({ selects: ['message.create'] });
   if (!event.match.selects) {
-    next(); // 跳过当前节点，进入下个兄弟路由
+    next();
     return;
   }
-  // return true   → 继续链
-  // return void   → 停止链
-};
-
-// 兼容签名（显式接收 event 和 next）
-export default async (event: Events[T], next: Next) => {
-  // ...
+  // business
 };
 ```
+
+## 相关文档
+
+- API 参数与方法：[hooks.md](./hooks.md)
+- 事件类型与字段：[events.md](./events.md)
+- 框架执行总览：[architecture.md](./architecture.md)
