@@ -12,12 +12,14 @@ const router = defineRouter([
     exact?: string,
     prefix?: string,
     regular?: RegExp,
-    selects?: EventKeys | EventKeys[],
+    selects?: EventKeys[],
     handler: lazy(() => import('./response/xxx')),
     children?: ResponseRoute[]
   }
 ]);
 ```
+
+- 正则至少以 ^(\/|#|＃) 开头
 
 ## 匹配顺序
 
@@ -51,7 +53,7 @@ const router = defineRouter([
 
 ```typescript
 export default async () => {
-  const [event, next] = useEvent({ selects: ['message.create'] });
+  const [event, next] = useEvent({ selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'] });
   if (!event.match.selects) {
     next();
     return;

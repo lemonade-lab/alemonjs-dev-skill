@@ -14,7 +14,7 @@
 
 ```typescript
 const [event, next] = useEvent({
-  selects: ['message.create'],
+  selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
   exact?: '/cmd',
   prefix?: '/cmd ',
   regular?: /pattern/
@@ -55,7 +55,7 @@ await mention.findOne(options?);
 ### useSubscribe
 
 ```typescript
-const [subscribe] = useSubscribe(['message.create']);
+const [subscribe] = useSubscribe(['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create']);
 const reg = subscribe.create(callback, ['UserId']);
 subscribe.mount(callback, keys);
 subscribe.unmount(callback, keys);
@@ -81,7 +81,7 @@ useMedia: upload sendChannel sendUser
 useHistory: list
 ```
 
-## 账号与请求（无需 event）
+## 账号与请求
 
 ```typescript
 useMe: info guilds threads friends

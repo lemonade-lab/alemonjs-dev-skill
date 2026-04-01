@@ -17,17 +17,6 @@ selects: [
 
 其余分类：message.update/delete、reaction、channel、guild、member、notice、private 请求。
 
-## 标准字段
-
-```typescript
-type AutoFields = {
-  CreateAt?: number;
-  DeviceId?: string;
-};
-
-type Expansion = { [key: string]: any };
-```
-
 ## 消息事件标准最小集
 
 ```typescript
@@ -55,25 +44,11 @@ type Expansion = { [key: string]: any };
 ## useEvent 标准守卫
 
 ```typescript
-const [event, next] = useEvent({ selects: ['message.create'], prefix: '/cmd' });
+const [event, next] = useEvent({ selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'], prefix: '/cmd' });
 if (!event.match.selects || !event.match.prefix) {
   next();
   return;
 }
-```
-
-## FormatEvent 标准构建
-
-```typescript
-import { FormatEvent } from 'alemonjs';
-
-const e = FormatEvent.create('message.create')
-  .addPlatform({ Platform: 'discord', value: raw })
-  .addUser({ UserId: 'u', UserKey: 'k', IsMaster: false, IsBot: false })
-  .addMessage({ MessageId: 'm' })
-  .addText({ MessageText: 'hello' })
-  .addMedia({ MessageMedia: [] })
-  .value;
 ```
 
 ## 标准化建议

@@ -36,17 +36,6 @@ buttons
   .addButton('帮助', 'help', { type: 'command', autoEnter: true });
 ```
 
-`addButton` 签名：
-
-```typescript
-BT(title: string, data?: string, options?: {
-  data?: string;
-  toolTip?: string;
-  autoEnter?: boolean;
-  type?: 'command' | 'link' | 'call';
-})
-```
-
 ## FormatMarkDown
 
 ```typescript

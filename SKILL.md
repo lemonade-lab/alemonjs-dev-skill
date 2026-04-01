@@ -38,13 +38,20 @@ src/
 - 统一签名：`export default async () => {}`
 - 统一开头：`useEvent` 做过滤守卫
 - 不匹配必须：`next(); return;`
-- 统一返回：`true` 继续链；`void/false` 终止链
+- 统一返回：`void` 除非做特殊功能处理才会返回其他值
 
 ```typescript
 import { useEvent, useMessage, Format } from 'alemonjs';
 
 export default async () => {
-  const [event, next] = useEvent({ selects: ['message.create'] });
+  const [event, next] = useEvent({ 
+    selects: [
+      'message.create', 
+      'private.message.create',
+      'interaction.create',
+      'private.interaction.create'
+      ] 
+    });
   if (!event.match.selects) {
     next();
     return;
@@ -57,19 +64,21 @@ export default async () => {
 
 ### 3. router 标准
 
-- `exact` 优先，`prefix` 次之，`regular` 最后
 - handler 必须 `lazy(() => import(...))`
 - 中间件与响应分离注册
+- 能在路由处就能明确匹配规则的就明确起来，避免在 handler 里再写一遍
+- `exact` 优先，`prefix` 次之，`regular` 最后
+- 一般情况下，能不用。middlewareRouter 实现功能就不用，尽量使用 responseRouter 的顶层守卫
 
 ```typescript
 import { defineChildren, defineRouter, lazy } from 'alemonjs';
 
 const middlewareRouter = defineRouter([
-  { prefix: '/', selects: ['message.create'], handler: lazy(() => import('./middleware/auth')) }
+  { prefix: '/', selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'], handler: lazy(() => import('./middleware/auth')) }
 ]);
 
 const responseRouter = defineRouter([
-  { exact: '/ping', selects: ['message.create'], handler: lazy(() => import('./response/ping')) }
+  { exact: '/ping', selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'], handler: lazy(() => import('./response/ping')) }
 ]);
 
 export default defineChildren({
@@ -82,8 +91,7 @@ export default defineChildren({
 ### 4. 消息标准
 
 - 默认使用 `Format.create()` 构建消息
-- 按钮只通过 `FormatButtonGroup`
-- 链接只通过 `FormatMarkDown.addLink(text, url)`
+- 优先使用 `FormatMarkDown` 构建文本
 
 ```typescript
 import { Format, FormatButtonGroup, FormatMarkDown } from 'alemonjs';
@@ -91,9 +99,9 @@ import { Format, FormatButtonGroup, FormatMarkDown } from 'alemonjs';
 const btn = new FormatButtonGroup();
 btn.addRow().addButton('确认', 'ok');
 
-const md = new FormatMarkDown().addText('说明').addLink('文档', 'https://example.com');
+const md = new FormatMarkDown().addText('说明')
 
-const format = Format.create().addText('标题').addButtonGroup(btn).addMarkdown(md);
+const format = Format.create().addMarkdown(md);
 ```
 
 ### 5. 构建标准
@@ -101,7 +109,7 @@ const format = Format.create().addText('标题').addButtonGroup(btn).addMarkdown
 - 开发入口：`app.ts`
 - 生产入口：`index.js`
 - 别名：统一 `@src`
-- 资源导入返回文件绝对路径
+- 资源导入返回的是文件绝对路径
 
 ## 适配大多数项目的三层能力模型
 
@@ -116,7 +124,7 @@ const format = Format.create().addText('标题').addButtonGroup(btn).addMarkdown
 1. 定义能力边界：一个 handler 只做一件事
 2. 写 `response/*.ts`：先过滤后执行
 3. 在 `src/index.ts` 注册路由
-4. 需要鉴权时加 `middleware/*.ts`
+4. 需要鉴权时就用 responseRouter 的顶层守卫
 5. 需要交互状态时加 `useSubscribe`
 6. 需要图片输出时接入 jsxp
 
@@ -127,18 +135,30 @@ npm create alemonjs
 npm run dev
 npm run view
 npm run build
-npm run start
 ```
 
-## 通用约束（强约定）
+## 通用约束
 
 - 不在 handler 顶层写平台分支逻辑，平台差异放适配器层
-- 不把路由匹配写进业务逻辑，统一放 `useEvent` 守卫
 - 不把消息拼装散落在多处，统一 `Format` 链式构建
-- 不让单个 handler 过长，超过 80 行应拆分
 
 ## 迁移与兼容
 
 - `createEvent` 迁移到 `useEvent`
-- `Format.addLink` 迁移到 `FormatMarkDown.addLink`
 - hooks 默认无参调用，旧写法传 event 仍兼容
+
+## 开发结束根据当前环境尝试进行检查
+
+- ts check
+
+```ts
+npm install -g @typescript/native-preview
+tsgo
+```
+
+- lint check
+
+```bash
+npm install -g eslint
+eslint src --ext .ts,.tsx,.js --fix --max-warnings=0
+```
