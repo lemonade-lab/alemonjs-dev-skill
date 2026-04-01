@@ -1,8 +1,8 @@
-# AlemonJS 事件参考
+# ALemonJS 事件参考
 
 ## 事件类型总览
 
-所有事件类型由 `EventKeys` 联合类型定义：
+所有事件类型由 `EventKeys` 联合类型定义（27 种事件）：
 
 ### 消息事件
 
@@ -61,91 +61,145 @@
 | `private.friend.remove` | 好友删除     |
 | `private.guild.add`     | 入群申请     |
 
-## 事件对象通用字段（AutoFields）
+### 事件分组常量
 
-框架自动注入到所有事件对象的字段：
+```typescript
+// 带消息体的事件（可用于路由匹配和消息处理）
+type EventsMessageCreateKeys =
+  | 'message.create'
+  | 'private.message.create'
+  | 'interaction.create'
+  | 'private.interaction.create';
+```
+
+## 事件对象通用字段
+
+框架自动注入的基础字段（`AutoFields`），所有字段**可选**：
 
 ```typescript
 type AutoFields = {
-  CreateAt: number; // 事件创建时间戳
-  DeviceId: string; // 设备/实例 ID
-  // 其他框架注入字段...
+  CreateAt?: number;   // 事件创建时间戳
+  DeviceId?: string;   // 设备/实例 ID
 };
+```
+
+所有事件类型都附加了 `Expansion` 扩展类型：
+
+```typescript
+type Expansion = { [key: string]: any };
+// 允许平台适配器通过 FormatEvent.add<E>() 注入扩展字段
 ```
 
 ## 消息事件核心字段
 
-公域消息 `message.create` 包含：
+公域消息 `message.create` 的字段组成：
 
 ```typescript
-{
-  // Platform 基础
-  Platform: string;          // 平台标识 ('discord', 'qq-bot' 等)
+// Platform 基础
+Platform: string;            // 平台标识 ('discord', 'qq-bot', 'kook' 等)
+BotId?: string;              // 机器人 ID
+value: any;                  // 平台原始事件数据（不可枚举）
 
-  // 用户信息
-  UserId: string;            // 用户 ID
-  UserKey: string;           // 用户唯一 Key (Platform:UserId)
-  UserName: string;          // 用户名
-  UserAvatar?: string;       // 用户头像 URL
-  IsMaster: boolean;         // 是否管理员
-  IsBot: boolean;            // 是否机器人
+// 用户信息（User 类型）
+UserId: string;              // 用户 ID
+UserKey: string;             // 用户唯一 Key
+UserName?: string;           // 用户名（可选）
+UserAvatar?: string;         // 用户头像 URL（可选）
+IsMaster: boolean;           // 是否管理员
+IsBot: boolean;              // 是否机器人
 
-  // 消息信息
-  MessageId: string;         // 消息 ID
-  MessageText: string;       // 消息文本内容
-  MessageBody: any[];        // 消息体（富文本结构）
+// 消息信息
+MessageId: string;           // 消息 ID
+ReplyId?: string;            // 回复消息 ID（可选）
+MessageText: string;         // 消息文本内容
+MessageMedia: any[];         // 媒体数据
 
-  // 空间信息
-  GuildId?: string;          // 服务器 ID
-  ChannelId?: string;        // 频道 ID
-  SpaceId?: string;          // 空间 ID（框架统一标识）
+// 空间信息（Guild + Channel）
+GuildId: string;             // 服务器/群 ID
+SpaceId: string;             // 空间 ID（框架统一标识）
+ChannelId: string;           // 频道 ID
 
-  // 框架注入
-  CreateAt: number;          // 创建时间
-  DeviceId: string;          // 设备 ID
-  name: EventKeys;           // 事件类型名称
-}
+// 开放平台
+OpenId: string;              // 开放 ID
+
+// 框架注入
+name: EventKeys;             // 事件类型名称
+Timestamp: number;           // 时间戳（由 FormatEvent 注入）
+CreateAt?: number;           // 创建时间（AutoFields）
+DeviceId?: string;           // 设备 ID（AutoFields）
 ```
 
 ## 常用事件类型组合
 
 ```typescript
-// 所有消息类型（公域 + 私域）
-selects: ['private.message.create', 'message.create', 'interaction.create', 'private.interaction.create'];
+// 所有消息类型（公域 + 私域 + 交互）— 最常用
+selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create']
 
 // 仅公域消息
-selects: ['message.create'];
+selects: ['message.create']
 
 // 包含交互（按钮回调）
-selects: ['message.create', 'interaction.create'];
-
-// 全部消息相关
-selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'];
+selects: ['message.create', 'interaction.create']
 ```
 
-## createEvent 过滤
+## useEvent 过滤
 
-在 handler 内对事件进行二次过滤：
+在 handler 内对事件进行过滤（替代已废弃的 `createEvent`）：
 
 ```typescript
-import { createEvent } from 'alemonjs';
+import { useEvent } from 'alemonjs';
 
-export default async (e, next) => {
-  const event = createEvent({
-    event: e,
+export default async () => {
+  const [event, next] = useEvent({
     selects: ['message.create'],
     exact: '/hello'
   });
 
-  // event.selects === true  → 事件类型匹配
-  // event.exact === true    → 精确匹配成功
-  // event.prefix === false  → 未设置前缀匹配
-  // event.regular === false → 未设置正则匹配
+  // event.match.selects === true  → 事件类型匹配
+  // event.match.exact === true    → 精确匹配成功
+  // event.match.prefix === false  → 未设置前缀匹配
+  // event.match.regular === false → 未设置正则匹配
 
-  if (!event.selects) {
+  if (!event.match.selects) {
     next();
     return;
   }
-  // 处理...
+
+  // 访问事件字段
+  event.current.MessageText;
+  event.current.UserId;
+  event.value;  // 平台原始数据
 };
 ```
+
+## FormatEvent 事件构建器（平台适配器使用）
+
+`FormatEvent` 用于平台适配器构建标准化事件对象，提供**类型安全**的链式 API——根据事件类型 `T` 自动约束可用方法。
+
+```typescript
+import { FormatEvent, wrapEvent } from 'alemonjs';
+
+// 基础构建
+const event = FormatEvent.create('message.create')
+  .addPlatform({ Platform: 'discord', value: rawData })
+  .addGuild({ GuildId: 'g1', SpaceId: 's1' })
+  .addChannel({ ChannelId: 'c1' })
+  .addUser({ UserId: 'u1', UserKey: 'k1', IsMaster: false, IsBot: false })
+  .addMessage({ MessageId: 'm1', ReplyId: 'r1' })
+  .addText({ MessageText: 'hello' })
+  .addMedia({ MessageMedia: [] })
+  .addOpen({ OpenId: 'o1' })
+  .value;
+
+// 添加自定义扩展字段（自动加 _ 前缀存储）
+const event2 = FormatEvent.create('message.create')
+  .addPlatform({ Platform: 'qq', value: raw })
+  .add<{ rawType: string }>({ rawType: 'GROUP_AT_MESSAGE_CREATE' })
+  .value;
+
+// wrapEvent：包装事件为只读代理，访问扩展字段时自动解析 _ 前缀
+const wrapped = wrapEvent<{ rawType: string }>(event2);
+wrapped.rawType; // 'GROUP_AT_MESSAGE_CREATE'（实际读取 _rawType）
+```
+
+**可用方法约束**：不同事件类型只允许调用对应的 `add*` 方法。例如 `private.message.delete` 只有 `addPlatform` 和 `addMessage`，调用 `addGuild` 会产生类型错误。

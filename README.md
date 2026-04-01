@@ -1,6 +1,6 @@
-# AlemonJS Dev Skill
+# ALemonJS Dev Skill
 
-AlemonJS 跨平台聊天机器人开发的 AI 编程助手 Skill，为 AI 编码工具提供 AlemonJS 框架的完整开发知识，包括路由、Hooks、消息格式、事件系统、JSX 卡片渲染等。
+ALemonJS 跨平台聊天机器人开发的 AI 编程助手 Skill，为 AI 编码工具提供 ALemonJS 框架的完整开发知识，包括路由、Hooks、消息格式、事件系统、JSX 卡片渲染等。
 
 支持 GitHub Copilot、Cursor、Windsurf 等主流 AI 编程助手。
 

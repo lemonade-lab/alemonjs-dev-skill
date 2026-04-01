@@ -1,4 +1,4 @@
-# AlemonJS 路由参考
+# ALemonJS 路由参考
 
 ## defineRouter
 
@@ -105,6 +105,18 @@ export default defineChildren({
 
 **执行顺序**：middlewareRouter → responseRouter
 
+### 语义化别名
+
+`defineResponse` 和 `defineMiddleware` 与 `defineRouter` 签名完全相同，仅用于语义化区分：
+
+```typescript
+import { defineResponse, defineMiddleware } from 'alemonjs';
+
+// 等价于 defineRouter([...])
+const responseRouter = defineResponse([...]);
+const middlewareRouter = defineMiddleware([...]);
+```
+
 ## ResponseRoute 完整类型
 
 ```typescript
@@ -123,13 +135,19 @@ type ResponseRoute = {
 每个 handler 文件必须 `export default` 一个函数：
 
 ```typescript
-// 签名
-export default async (event: Events[T], next: Next) => {
+// 推荐签名（无参，通过 AsyncLocalStorage 自动获取上下文）
+export default async () => {
+  const [event, next] = useEvent({ selects: ['message.create'] });
+  if (!event.match.selects) {
+    next(); // 跳过当前节点，进入下个兄弟路由
+    return;
+  }
   // return true   → 继续链
   // return void   → 停止链
-  // next()        → 跳过当前节点，进入下个兄弟路由
+};
+
+// 兼容签名（显式接收 event 和 next）
+export default async (event: Events[T], next: Next) => {
+  // ...
 };
 ```
-
-- `event`：标准化的事件对象
-- `next`：跳过函数（NOT 中间件 next，而是路由级别的跳过）

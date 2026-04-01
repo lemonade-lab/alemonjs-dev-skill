@@ -1,4 +1,4 @@
-# AlemonJS 架构参考
+# ALemonJS 架构参考
 
 ## 整体架构
 
@@ -12,7 +12,7 @@
 └────────────────────┬────────────────────────────────┘
                      │ CBP (Cross-platform Protocol)
 ┌────────────────────┴────────────────────────────────┐
-│                  AlemonJS Core                       │
+│                  ALemonJS Core                       │
 │  事件处理器 (Event Processor)                         │
 │  ├─ onProcessor (过滤/去重/重定向)                    │
 │  ├─ expendMiddleware (中间件链)                       │
@@ -49,7 +49,7 @@
 └──────────────────┘              └──────────────────┘
 ```
 
-- **Platform 进程**：运行平台特定代码，连接平台 API，将原始事件标准化为 AlemonJS 事件
+- **Platform 进程**：运行平台特定代码，连接平台 API，将原始事件标准化为 ALemonJS 事件
 - **Client 进程**：运行开发者应用代码，处理事件，通过 CBP 发送 action
 
 ## 事件处理管线
@@ -66,21 +66,21 @@ Platform 事件到达
   └─ 重定向规则 (redirect_regular)
         │
         ▼
-  expendCycle (编排层)
-  ├─ expendMiddleware (中间件)
-  │   ├─ 文件式中间件 (旧)
-  │   └─ 路由式中间件 (middlewareRouter)
+  expendCycle (编排层 — 三阶段生命周期)
   │
-  ├─ expendSubscribe('create')
+  ├─ create 阶段
+  │   ├─ expendMiddleware (middlewareRouter 优先 → 文件式中间件)
+  │   └─ expendSubscribeCreate (create 阶段订阅触发)
   │
-  ├─ expendEvent (响应处理)
-  │   ├─ 路由式响应 (responseRouter) ← 优先
-  │   └─ 文件式响应 (response) ← 后执行
+  ├─ mount 阶段
+  │   ├─ expendEvent (responseRouter 优先 → 文件式响应)
+  │   └─ expendSubscribeMount (mount 阶段订阅触发)
   │
-  ├─ expendSubscribe('mount')
-  │
-  └─ expendSubscribe('unmount')
+  └─ unmount 阶段
+      └─ expendSubscribeUnmount (unmount 阶段订阅触发)
 ```
+
+**handler 执行上下文**：`callHandler` 通过 `withEventContext` 绑定 `AsyncLocalStorage`，使所有 hooks 可无参调用。
 
 ## 数据流
 
@@ -101,6 +101,8 @@ Platform 事件到达
         ▼
   平台 SDK 发送到聊天平台
 ```
+
+**Hook 上下文注入**：`callHandler` 通过 `withEventContext(event, next, runner)` 将事件绑定到 `AsyncLocalStorage`，使 handler 内部无需显式传递 event。
 
 ## ChildrenApp 生命周期
 
@@ -136,18 +138,18 @@ await app.unMounted?.(error);
 
 ```typescript
 global.alemonjsCore = {
-  storeState: {}, // 功能开关 [已废弃]
-  storeStateSubscribe: {}, // 状态订阅 [已废弃]
   storeSubscribeList: {
-    create: Map<EventKeys, SinglyLinkedList>, // create 阶段订阅
-    mount: Map<EventKeys, SinglyLinkedList>, // mount 阶段订阅
-    unmount: Map<EventKeys, SinglyLinkedList> // unmount 阶段订阅
+    create: Map<EventKeys, SinglyLinkedList<SubscribeValue>>,  // create 阶段订阅
+    mount:  Map<EventKeys, SinglyLinkedList<SubscribeValue>>,  // mount 阶段订阅
+    unmount: Map<EventKeys, SinglyLinkedList<SubscribeValue>>  // unmount 阶段订阅
   },
   storeChildrenApp: {
-    [appName]: ChildrenApp // 所有注册的子模块
+    [appName: string]: StoreChildrenApp  // 所有注册的子模块
   }
 };
 ```
+
+Store 访问类使用**版本化缓存**（`Response`、`ResponseRouter`、`Middleware`、`MiddlewareRouter`），当子模块注册/卸载时自动更新版本号。
 
 ## 配置系统
 
