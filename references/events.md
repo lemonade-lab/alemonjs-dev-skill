@@ -41,15 +41,43 @@ selects: [
 
 说明：`GuildId/ChannelId/OpenId/ReplyId` 按平台能力选填。
 
+## route 上下文标准
+
+```typescript
+{
+  __route?: {
+    key: string;
+    text: string;
+    rawArgs: string[];
+    parsedArgs: unknown[];
+    params: Record<string, unknown>;
+  }
+}
+```
+
+说明：
+
+- 当事件被 Router DSL 命中时，框架会自动写入 `event.__route`
+- `text` 是当前 scope 归一化后的命令文本
+- `params` 来自 `schema` 校验后的命名参数
+
 ## useEvent 标准守卫
 
 ```typescript
-const [event, next] = useEvent({ selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'], prefix: '/cmd' });
-if (!event.match.selects || !event.match.prefix) {
+const [event, next] = useEvent({
+  selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create']
+});
+
+if (!event.match.selects) {
   next();
   return;
 }
 ```
+
+说明：
+
+- 当前推荐用 `Router.create().group().use()` 做命令匹配
+- `useEvent` 更适合作为事件类型过滤守卫，不再作为主命令路由入口
 
 ## 标准化建议
 

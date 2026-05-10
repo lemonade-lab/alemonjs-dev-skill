@@ -6,11 +6,11 @@
 
 ```text
 Application Layer
-  response / middleware / image component / format builder
+  index(router create/group/use) / response / middleware / image component / format builder
 
 Core Layer
   onProcessor -> expendCycle(create/mount/unmount)
-  middlewareRouter -> responseRouter
+  router.define -> scope dispatch -> importer chain
   subscribe(create/mount/unmount)
   AsyncLocalStorage context
 
@@ -23,29 +23,32 @@ Platform Adapter Layer
 
 ```text
 onProcessor
-  -> create   (middleware + subscribe.create)
-  -> mount    (response + subscribe.mount)
+  -> create   (router scope + subscribe.create)
+  -> mount    (route dispatch + subscribe.mount)
   -> unmount  (subscribe.unmount)
 ```
 
 ## 标准职责边界
 
-- 中间件：准入与放行（鉴权、频控、日志）
-- 响应：业务处理与消息输出
+- index/router：声明事件范围、scope、命令路径与 fallback
+- 中间件 importer：准入与放行（鉴权、频控、日志）
+- 响应 importer：业务处理与消息输出
 - 订阅：跨消息状态等待与收敛
 - 适配器：平台差异与字段映射
 
 ## 标准执行约定
 
-- `middlewareRouter` 先于 `responseRouter`
-- `return true` 继续链路，`void/false` 终止链路
+- Router DSL 先做 scope 命令匹配，再执行 importer 链
+- `await next()` 继续链路，`false` 终止链路，`void` 表示当前节点处理完成
 - hooks 默认无参调用，事件上下文由 AsyncLocalStorage 注入
+- 命中结果通过 `event.__route` 注入给后续 handler
 
 ## 标准工程建议
 
 - 单 handler 单职责
+- 路由规则集中在 `src/index.ts`
 - 业务层不直接耦合平台 SDK
-- 复杂流程拆为多个路由节点而非巨型函数
+- 复杂流程拆为多个 route/importer，而非巨型函数
 - 平台特有逻辑集中在适配器层
 
 ## 相关文档

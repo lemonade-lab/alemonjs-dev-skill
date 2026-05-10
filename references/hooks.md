@@ -14,6 +14,30 @@
 
 ```typescript
 const [event, next] = useEvent({
+  selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create']
+});
+```
+
+返回结构：
+
+```typescript
+{
+  current,
+  value,
+  match: { selects }
+}
+```
+
+说明：
+
+- 当前推荐把命令匹配交给 `Router.create().group().use()`
+- `useEvent` 主要用于读取当前事件和在非命中场景下 `next()`
+- 若当前 handler 已由 Router DSL 命中，命令与参数优先从 `event.__route` 读取
+
+旧版兼容：
+
+```typescript
+const [event, next] = useEvent({
   selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
   exact?: '/cmd',
   prefix?: '/cmd ',
@@ -21,7 +45,7 @@ const [event, next] = useEvent({
 });
 ```
 
-返回结构：
+旧版返回结构通常会包含：
 
 ```typescript
 {
@@ -42,6 +66,17 @@ await message.delete({ messageId? });
 await message.pin({ messageId? });
 await message.unpin({ messageId? });
 await message.get({ messageId? });
+```
+
+常见搭配：
+
+```typescript
+export default async (event) => {
+  const [message] = useMessage();
+  const uid = String(event.__route?.params?.uid ?? '');
+
+  await message.send({ format });
+};
 ```
 
 ### useMention
@@ -103,6 +138,24 @@ const direct = MessageDirect.create();
 await direct.sendToChannel({ SpaceId, format, replyId? });
 await direct.sendToUser({ OpenID, format });
 ```
+
+## route 上下文
+
+命令通过 Router DSL 命中后，可直接从事件上拿到路由上下文：
+
+```typescript
+event.__route?.key;
+event.__route?.text;
+event.__route?.rawArgs;
+event.__route?.parsedArgs;
+event.__route?.params;
+```
+
+推荐：
+
+- 不重复解析 `event.MessageText`
+- 不在业务 handler 里自己判断前缀
+- 命令参数优先依赖 `schema + event.__route.params`
 
 ## 相关文档
 

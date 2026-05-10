@@ -1,66 +1,217 @@
 # AlemonJS 路由参考
 
-本文仅覆盖路由匹配与执行规则，不重复 hooks 和事件字段。
+本文覆盖当前推荐的 Router DSL，同时保留旧版 `defineRouter` 兼容写法，不重复 hooks 和事件字段。
 
-## defineRouter
+## 推荐入口
+
+```typescript
+import { Router, defineChildren } from 'alemonjs';
+
+const router = Router.create({
+  events: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create']
+});
+
+const appGroup = router.group({
+  routeText: {
+    prefixes: ['/', '#', '＃', '!', '！'],
+    stripPrefix: true,
+    allowBare: true
+  }
+});
+
+appGroup.use('hello', () => import('./response/hello'));
+
+export default defineChildren({
+  register() {
+    return {
+      responseRouter: router.define
+    };
+  }
+});
+```
+
+## 核心模型
+
+- `Router.create(options)`：创建路由实例并声明默认 `events/platforms`
+- `router.group(options, ...middlewares)`：创建 scope，并给 scope 绑定前缀、中间件、fallback 等规则
+- `group.use(config, ...importers)`：注册命令路径与执行 importer 链
+- `router.res(config, ...importers)`：注册纯事件型响应或兜底处理
+- `router.define`：把 DSL 转成底层 `defineRouter(...)` 可消费结构
+
+## 路由路径
+
+- 命令路径统一用 `path`
+- 支持单词或双词命令，如 `hello`、`user info`
+- 路径会自动归一化，前缀 `/ # ＃ ! ！` 会被去掉
+- 匹配优先使用双词 key，其次单词 key
+
+```typescript
+group.use('help', () => import('./response/help'));
+group.use('user info', () => import('./response/user-info'));
+```
+
+## Scope 与 routeText
+
+`group({ routeText })` 控制当前作用域内命令文本的解析方式。
+
+```typescript
+const appGroup = router.group({
+  routeText: {
+    prefixes: ['/', '#', '＃', '!', '！'],
+    stripPrefix: true,
+    allowBare: true
+  }
+});
+```
+
+- `prefixes`：允许的命令前缀
+- `stripPrefix`：匹配前是否剥离前缀
+- `allowBare`：是否允许无前缀文本也进入命令匹配
+- `byPlatform`：可按平台覆写前缀规则
+
+## 中间件链
+
+scope 或 route 上都可以挂 importer，执行顺序是声明顺序。
+
+```typescript
+const adminGroup = router.group(
+  {
+    path: 'admin',
+    routeText: { prefixes: ['/'], stripPrefix: true }
+  },
+  () => import('./middleware/auth')
+);
+
+adminGroup.use('ban', () => import('./response/admin-ban'));
+```
+
+- importer 模块默认 `export default`
+- handler 签名推荐 `export default async (event, next) => {}`
+- `await next()`：进入下一个 importer
+- 返回 `false`：终止链路
+- 不调用 `next` 且返回 `void`：视为当前链路处理完成
+
+## 参数校验
+
+命令参数优先放在 `schema`，不要在 handler 里手写分散判断。
+
+```typescript
+group.use(
+  {
+    path: 'user info',
+    schema: {
+      usage: 'user info <uid>',
+      args: [
+        {
+          name: 'uid',
+          rules: [{ required: true }]
+        }
+      ]
+    }
+  },
+  () => import('./response/user-info')
+);
+```
+
+- 支持 `string`、`number`、`enum`、`range`、`rest`
+- 校验失败会自动回复错误与 `usage`
+- 解析结果会挂到 `event.__route.params`
+
+## 路由上下文
+
+命中后会把当前命令上下文注入到 `event.__route`：
+
+```typescript
+{
+  key: 'user info',
+  text: 'user info 10001',
+  rawArgs: ['10001'],
+  parsedArgs: ['10001'],
+  params: { uid: '10001' }
+}
+```
+
+业务 handler 优先读取这里，而不是重新解析 `MessageText`。
+
+## fallback 建议
+
+未匹配命令时，scope 可以自动给出相近指令提示。
+
+```typescript
+router.group({
+  routeText: { prefixes: ['/'], stripPrefix: true },
+  fallback: {
+    suggest: true,
+    allowPrefixMatch: true
+  }
+});
+```
+
+## 旧版 defineRouter 写法
+
+旧项目仍可能直接使用 `defineRouter([...])`：
 
 ```typescript
 import { defineRouter, lazy } from 'alemonjs';
 
-const router = defineRouter([
+const middlewareRouter = defineRouter([
   {
-    exact?: string,
-    prefix?: string,
-    regular?: RegExp,
-    selects?: EventKeys[],
-    handler: lazy(() => import('./response/xxx')),
-    children?: ResponseRoute[]
+    prefix: '/',
+    selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
+    handler: lazy(() => import('./middleware/auth'))
+  }
+]);
+
+const responseRouter = defineRouter([
+  {
+    exact: '/help',
+    selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
+    handler: lazy(() => import('./response/help'))
+  },
+  {
+    prefix: '/admin ',
+    selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
+    handler: lazy(() => import('./response/admin'))
+  },
+  {
+    regular: /^(\/|#|＃|!|！)roll\s+\d+$/,
+    selects: ['message.create', 'private.message.create'],
+    handler: lazy(() => import('./response/roll'))
   }
 ]);
 ```
 
-- 正则至少以 ^(\/|#|＃) 开头
+旧版模型特点：
 
-## 匹配顺序
+- 单节点支持 `exact`、`prefix`、`regular`
+- 单节点内部匹配顺序是 `exact -> prefix -> regular`
+- 节点之间按数组顺序匹配，先命中先执行
+- 常见工程结构是 `middlewareRouter -> responseRouter`
+- handler 一般仍要配合 `useEvent(...).match` 做守卫
 
-单节点内部：
-1. `exact`
-2. `prefix`
-3. `regular`
-
-节点之间：按数组顺序，先匹配先执行。
-
-## 执行顺序
-
-`middlewareRouter -> responseRouter`
-
-中间件约定：
-- `return true`：继续到下一个节点
-- `return void/false`：终止
-
-## lazy 约束
-
-- handler 必须使用 `lazy(() => import(...))`
-- 目标模块必须 `export default`
-
-## 嵌套路由
-
-父节点匹配后再进入 children，常用于：
-- 统一鉴权
-- 管理命令分组
-
-## 推荐 handler 模式
+## 旧版 handler 守卫
 
 ```typescript
+import { useEvent } from 'alemonjs';
+
 export default async () => {
-  const [event, next] = useEvent({ selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'] });
-  if (!event.match.selects) {
+  const [event, next] = useEvent({
+    selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
+    prefix: '/admin '
+  });
+
+  if (!event.match.selects || !event.match.prefix) {
     next();
     return;
   }
-  // business
 };
 ```
+
+## 兼容说明
+
+- `defineRouter([...])` 仍是底层兼容结构
+- 当前业务层不推荐继续手写 `exact/prefix/regular`
+- 旧项目迁移时，优先把命令节点改成 `group.use(path, importer)`
 
 ## 相关文档
 
