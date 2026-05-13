@@ -1,6 +1,6 @@
 ---
 name: alemonjs-dev-skill
-description: 'AlemonJS 通用开发技能。Use when: 新建或维护大多数 AlemonJS 项目、统一 Router DSL / handler / hooks 写法、快速落地消息/图片/中间件/订阅能力、按标准结构组织工程、接入 lvyjs 构建链路。'
+description: 'AlemonJS 通用开发技能。Use when: 新建或维护大多数 AlemonJS 项目、统一 Router DSL / handler / hooks 写法、处理 useEvent 与 route 上下文、按官网标准组织 Format/Markdown/Button 消息、实现订阅/中间件/配置读取/框架托管定时任务、处理时间与 dayjs、按标准结构组织工程、接入 lvyjs 构建链路。'
 argument-hint: '描述目标功能与场景，如 "加一个可扩展的签到命令" 或 "统一项目路由和中间件写法"'
 ---
 
@@ -90,7 +90,7 @@ export default defineChildren({
 ```typescript
 import { useEvent, useMessage, Format } from 'alemonjs';
 
-export default () => {
+export default async () => {
   const [event] = useEvent();
   const [message] = useMessage();
   const name = String(event.current.__route?.params?.name ?? 'world');
@@ -258,6 +258,13 @@ npm run build
 - 初始化、挂载、异常卸载：读取 [references/architecture.md](./references/architecture.md) 的“应用生命周期钩子”
 - 配置读取、配置监听、配置写回：读取 [references/app-runtime.md](./references/app-runtime.md) 的“配置读取”
 - 定时任务、cron、暂停恢复、自动清理：读取 [references/app-runtime.md](./references/app-runtime.md) 的“框架托管定时任务”
+
+## 仍未找到相关内容时
+
+- 先在 [references](./references) 中继续查找最接近主题的文档
+- 若仍无法确认，优先阅读官网文档目录：<https://github.com/lemonade-lab/alemonjs.dev/tree/main/docs>
+- 若问题已经落到 API 行为、返回结构、路由挂载层级、消息构建器源码细节，再阅读框架源码目录：<https://github.com/lemonade-lab/alemonjs/tree/main/packages/alemonjs/src/app>
+- 在继续深入前，可先询问用户是否需要按官网文档或源码进一步核对，再给出结论
 
 ## 开发结束根据当前环境尝试进行检查
 

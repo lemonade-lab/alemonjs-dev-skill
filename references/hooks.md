@@ -28,7 +28,7 @@ const [event, next] = useEvent({
 {
   current,
   value,
-  match: { selects }
+  match: { selects, exact, prefix, regular }
 }
 ```
 

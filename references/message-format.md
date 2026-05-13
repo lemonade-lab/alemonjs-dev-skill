@@ -21,7 +21,6 @@ format.clear();
 ```
 
 注意：
-- `Format` 没有 `addBreak()`。
 - 链接请用 Markdown 构建器的 `addLink()`，不要用废弃 `Format.addLink()`。
 - `Format` 是统一消息容器。业务层优先从 `Format.create()` 出发构建整条消息。
 - 按钮与 Markdown 的推荐写法以官网文档示例为准：按钮使用 `Format.createButtonGroup()`，Markdown 使用 `Format.createMarkdown()`。
@@ -56,7 +55,6 @@ md.addTitle('标题')
   .addBlockquote('引用')
   .addDivider()
   .addNewline()
-  .addBreak()
   .addMention(userId?)
   .addButton('操作', { data: 'action' });
 ```
