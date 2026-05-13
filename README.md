@@ -42,7 +42,7 @@ git clone --depth=1 https://github.com/lemonade-lab/alemonjs-dev-skill .windsurf
 
 ```bash
 npm create alemonjs@latest -y
-cd alemon-app
+cd alemonjs
 npm install yarn -g --registry=https://registry.npmmirror.com
 yarn install
 ```
@@ -51,5 +51,5 @@ yarn install
 
 ```bash
 npm install alemonjs -g --registry=https://registry.npmmirror.com
-alemonc version update
+alemonc upgrade
 ```
