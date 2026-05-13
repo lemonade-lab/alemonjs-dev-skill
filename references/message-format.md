@@ -10,7 +10,7 @@ const format = Format.create();
 format.addText('text');
 format.addImage(bufferOrUrl);
 format.addMention(userId?);
-format.addButtonGroup(buttons);
+format.addButtonGroup(...rows);
 format.addMarkdown(md);
 format.addMarkdownOriginal('**raw**');
 format.addAttachment(url, options?);
@@ -22,24 +22,27 @@ format.clear();
 
 注意：
 - `Format` 没有 `addBreak()`。
-- 链接请用 `FormatMarkDown.addLink()`，不要用废弃 `Format.addLink()`。
+- 链接请用 Markdown 构建器的 `addLink()`，不要用废弃 `Format.addLink()`。
+- `Format` 是统一消息容器。业务层优先从 `Format.create()` 出发构建整条消息。
+- 按钮与 Markdown 的推荐写法以官网文档示例为准：按钮使用 `Format.createButtonGroup()`，Markdown 使用 `Format.createMarkdown()`。
 
-## FormatButtonGroup
+## 按钮推荐写法
 
 ```typescript
-const buttons = new FormatButtonGroup();
-buttons
-  .addRow()
-  .addButton('确认', 'confirm')
-  .addButton('取消', 'cancel')
-  .addRow()
-  .addButton('帮助', 'help', { type: 'command', autoEnter: true });
+const format = Format.create().addButtonGroup(
+  Format.createButtonGroup()
+    .addRow()
+    .addButton('确认', 'confirm')
+    .addButton('取消', 'cancel')
+    .addRow()
+    .addButton('帮助', 'help', { type: 'command', autoEnter: true })
+);
 ```
 
-## FormatMarkDown
+## Markdown 推荐写法
 
 ```typescript
-const md = new FormatMarkDown();
+const md = Format.createMarkdown();
 md.addTitle('标题')
   .addSubtitle('副标题')
   .addText('正文')

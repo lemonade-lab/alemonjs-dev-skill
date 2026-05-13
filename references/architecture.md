@@ -28,6 +28,36 @@ onProcessor
   -> unmount  (subscribe.unmount)
 ```
 
+## 应用生命周期钩子
+
+`defineChildren(...)` 除了注册路由，还承载应用初始化和异常卸载时机。
+
+```typescript
+export default defineChildren({
+  onCreated() {
+    // 初始化阶段
+  },
+  onMounted(store) {
+    // 路由与中间件索引已建立
+  },
+  unMounted(error) {
+    // 异常卸载
+  }
+});
+```
+
+推荐职责：
+
+- `onCreated`：放初始化动作、启动前检查、可能阻塞运行的预处理
+- `onMounted`：放索引建立后的观察、诊断、注册后检查
+- `unMounted(error)`：放异常清理、告警、兜底日志
+
+避免：
+
+- 在 handler 里做一次性初始化
+- 在 `onCreated` 里塞入和业务消息处理耦合的命令逻辑
+- 用原生全局状态替代可控的生命周期钩子
+
 ## 标准职责边界
 
 - index/router：声明事件范围、scope、命令路径与 fallback
@@ -41,7 +71,7 @@ onProcessor
 - Router DSL 先做 scope 命令匹配，再执行 importer 链
 - `await next()` 继续链路，`false` 终止链路，`void` 表示当前节点处理完成
 - hooks 默认无参调用，事件上下文由 AsyncLocalStorage 注入
-- 命中结果通过 `event.__route` 注入给后续 handler
+- 命中结果会写入底层事件对象，业务通过 `useEvent()` 读取时，优先从 `event.current.__route` 访问
 
 ## 标准工程建议
 

@@ -1,16 +1,20 @@
 # AlemonJS Hooks 参考
 
-本文聚焦业务可直接调用的 hooks。事件字段详见 events，消息结构详见 message-format。
+本文聚焦业务可直接调用的 hooks，结合官方 `docs/alemonjsDocs/basic/hook.mdx`、`response.md` 与 `data-type.md` 的能力面整理推荐写法。事件字段详见 events，消息结构详见 message-format。
 
 ## 使用约定
 
 - 所有 hooks 的 `event` 参数都可选。
-- handler 内默认依赖 AsyncLocalStorage 自动注入上下文。
-- 推荐无参调用：`useMessage()`、`useMention()`。
+- response handler 内默认依赖 AsyncLocalStorage 自动注入上下文，优先无参调用。
+- 业务代码内部读取当前事件时，默认优先 `const [event, next] = useEvent()`，不要直接依赖 handler 形参上的 `event`。
+- 非 response 上下文、订阅回调、工具函数中需要显式传入 `event`。
+- 当前推荐把命令匹配交给 `Router.create().group().use()`，hooks 负责读上下文和执行平台动作。
 
 ## 核心入口
 
 ### useEvent
+
+`useEvent` 用于安全读取当前事件和 `next` 回调，也兼容旧版 `exact/prefix/regular` 守卫。
 
 ```typescript
 const [event, next] = useEvent({
@@ -28,21 +32,33 @@ const [event, next] = useEvent({
 }
 ```
 
-说明：
+字段说明：
 
-- 当前推荐把命令匹配交给 `Router.create().group().use()`
-- `useEvent` 主要用于读取当前事件和在非命中场景下 `next()`
-- 若当前 handler 已由 Router DSL 命中，命令与参数优先从 `event.__route` 读取
+- `event.current`：标准化后的当前事件对象，业务优先读这里
+- `event.value`：原始平台数据
+- `event.match`：当前守卫条件的命中结果
+
+推荐：
+
+- Router DSL 已命中时，命令名和参数优先从 `event.current.__route` 读取
+- 需要读取 `UserId/GuildId/ChannelId/MessageId` 时，优先从 `event.current` 读取
+- 不把 handler 形参当作默认事件入口，业务内部统一先 `useEvent()`
+- 需要放行旧链路或订阅链路时，再显式调用 `next()`
 
 旧版兼容：
 
 ```typescript
 const [event, next] = useEvent({
   selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
-  exact?: '/cmd',
-  prefix?: '/cmd ',
-  regular?: /pattern/
+  exact: '/cmd',
+  prefix: '/cmd ',
+  regular: /pattern/
 });
+
+if (!event.match.selects || !event.match.regular) {
+  next();
+  return;
+}
 ```
 
 旧版返回结构通常会包含：
@@ -55,7 +71,15 @@ const [event, next] = useEvent({
 }
 ```
 
+`next` 周期语义：
+
+- `next()`：当前周期继续后续匹配
+- `next(true)`：下一个周期继续
+- `next(true, true)`：下下个周期继续
+
 ### useMessage
+
+`useMessage` 用于消息发送、编辑、删除、置顶、取详情，是业务里最常用的动作 hook。
 
 ```typescript
 const [message] = useMessage();
@@ -71,72 +95,296 @@ await message.get({ messageId? });
 常见搭配：
 
 ```typescript
-export default async (event) => {
-  const [message] = useMessage();
-  const uid = String(event.__route?.params?.uid ?? '');
+import { useEvent, useMessage, Format } from 'alemonjs';
 
-  await message.send({ format });
+export default async () => {
+  const [event] = useEvent();
+  const [message] = useMessage();
+  const uid = String(event.current.__route?.params?.uid ?? '');
+
+  await message.send({
+    format: Format.create().addText(`uid=${uid}`)
+  });
 };
 ```
 
+补充约定：
+
+- `send` 可传 `{ format, replyId? }`，也可直接传 `DataEnums[]`
+- 消息发送返回通常是 `Result[]`，一个 `format` 可能被平台拆成多次实际 API 调用
+- 格式降级和平台兼容由框架负责，业务层只构建 `Format`
+
 ### useMention
+
+`useMention` 用于解析当前消息中的 @ 提及数据。
 
 ```typescript
 const [mention] = useMention();
-await mention.find(options?);
-await mention.findOne(options?);
+const one = await mention.findOne();
+const many = await mention.find({ IsBot: false });
 ```
+
+常用过滤项：
+
+- `UserId`
+- `UserKey`
+- `UserName`
+- `IsMaster`
+- `IsBot`
+
+说明：
+
+- `find()` 返回所有匹配提及项
+- `findOne()` 返回第一个匹配项
+- 默认常见场景下会排除 bot，写业务时不要假设一定能拿到用户
 
 ### useSubscribe
 
+`useSubscribe` 用于在某个事件周期里持续观察后续事件，适合登录确认、多轮交互、二次确认、验证码一类流程。
+
 ```typescript
-const [subscribe] = useSubscribe(['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create']);
-const reg = subscribe.create(callback, ['UserId']);
-subscribe.mount(callback, keys);
-subscribe.unmount(callback, keys);
-subscribe.cancel(reg);
+const [subscribe] = useSubscribe(['message.create', 'private.message.create']);
+
+const sub = subscribe.mount(
+  async (event, next) => {
+    const [message] = useMessage(event);
+    const text = event.MessageText;
+
+    if (text === '123456') {
+      await message.send({ format: Format.create().addText('密码正确') });
+      return;
+    }
+
+    await message.send({ format: Format.create().addText('密码不正确') });
+    next();
+  },
+  ['UserId']
+);
+
+subscribe.cancel(sub);
 ```
+
+订阅时机：
+
+- `subscribe.create(callback, keys)`：响应体创建时触发
+- `subscribe.mount(callback, keys)`：中间件之后、响应之前触发
+- `subscribe.unmount(callback, keys)`：响应之后触发
+- `subscribe.cancel(sub)`：取消订阅
+
+`keys` 说明：
+
+- 用于指定事件匹配键，如 `['UserId']`、`['UserId', 'ChannelId']`
+- 只有这些字段值相同的事件，才会命中对应订阅回调
+
+订阅回调里的 `next` 语义：
+
+- `next()`：保持订阅
+- `next(true)`：保持订阅且传递给下一个订阅
+- `next(true, true)`：保持订阅且传递给下一个周期
+
+推荐：
+
+- 订阅一定配超时和取消逻辑，避免悬空状态
+- 多轮交互优先按 `UserId` 或 `UserId + ChannelId` 收敛作用域
+- 订阅回调里如果要发消息或读上下文，显式 `useMessage(event)`
 
 ## 管理类 hooks
 
+### useMember
+
+成员管理，常用于查成员、踢人、封禁、禁言、改名片、头衔。
+
 ```typescript
-useGuild: info list update leave
-useChannel: info list create update delete
-useMember: info list search kick ban unban
-useRole: list create update remove assign revoke
-usePermission: get set
-useReaction: add remove list
-useAnnounce: set remove
+const [member] = useMember();
+
+await member.info({ userId: '10001' });
+await member.list({ guildId: '20001' });
+await member.search({ keyword: '管理', limit: 20 });
+await member.kick({ userId: '10001' });
+await member.ban({ userId: '10001', reason: '违规', duration: 3600 });
+await member.unban({ userId: '10001' });
+await member.mute({ userId: '10001', duration: 60 });
+await member.admin({ userId: '10001', enable: true });
+await member.card({ userId: '10001', card: '新昵称' });
+await member.title({ userId: '10001', title: 'VIP', duration: -1 });
+```
+
+### useChannel
+
+频道管理。
+
+```typescript
+const [channel] = useChannel();
+
+await channel.info({ channelId: '30001' });
+await channel.list({ guildId: '20001' });
+await channel.create({ name: '新频道', guildId: '20001' });
+await channel.update({ channelId: '30001', name: '改名', topic: '新话题' });
+await channel.delete({ channelId: '30001' });
+```
+
+### useGuild
+
+服务器或公会管理。
+
+```typescript
+const [guild] = useGuild();
+
+await guild.info({ guildId: '20001' });
+await guild.list();
+await guild.update({ guildId: '20001', name: '新名称' });
+await guild.leave({ guildId: '20001', isDismiss: false });
+await guild.mute({ guildId: '20001', enable: true });
+```
+
+### useRole
+
+角色管理。
+
+```typescript
+const [role] = useRole();
+
+await role.list({ guildId: '20001' });
+await role.create({ name: 'VIP', color: 0xff0000, guildId: '20001' });
+await role.update({ roleId: '40001', name: '超级VIP' });
+await role.delete({ roleId: '40001' });
+await role.assign({ userId: '10001', roleId: '40001' });
+await role.remove({ userId: '10001', roleId: '40001' });
+```
+
+### usePermission
+
+频道权限管理。
+
+```typescript
+const [permission] = usePermission();
+
+await permission.get({ userId: '10001', channelId: '30001' });
+await permission.set({ userId: '10001', channelId: '30001', allow: '1', deny: '0' });
+```
+
+### useReaction
+
+消息表情回应管理。
+
+```typescript
+const [reaction] = useReaction();
+
+await reaction.add({ emojiId: '👍' });
+await reaction.remove({ emojiId: '👍', messageId: '50001' });
+await reaction.list({ emojiId: '👍', messageId: '50001', limit: 20 });
+```
+
+### useAnnounce
+
+频道公告管理。
+
+```typescript
+const [announce] = useAnnounce();
+
+await announce.set({ messageId: '50001', channelId: '30001', guildId: '20001' });
+await announce.remove({ messageId: '50001', guildId: '20001' });
 ```
 
 ## 媒体与历史
 
+### useMedia
+
+媒体上传与主动发送。
+
 ```typescript
-useMedia: upload sendChannel sendUser
-useHistory: list
+const [media] = useMedia();
+
+await media.upload({ type: 'image', url: 'https://example.com/image.png' });
+await media.sendChannel({ type: 'image', url: 'https://example.com/image.png', channelId: '30001' });
+await media.sendUser({ userId: '10001', type: 'audio', url: 'https://example.com/test.mp3' });
+```
+
+`type` 常用值：
+
+- `'image'`
+- `'audio'`
+- `'video'`
+- `'file'`
+
+### useHistory
+
+消息历史查询。
+
+```typescript
+const [history] = useHistory();
+
+await history.list({ channelId: '30001', limit: 50, before: '50001' });
 ```
 
 ## 账号与请求
 
+### useMe
+
+当前 Bot 账号信息。
+
 ```typescript
-useMe: info guilds threads friends
-useUser: info
-useRequest: friend guild
+const [me] = useMe();
+
+await me.info();
+await me.guilds();
+await me.threads();
+await me.friends();
+```
+
+### useUser
+
+用户信息查询。
+
+```typescript
+const [user] = useUser();
+
+await user.info({ userId: '10001' });
+```
+
+### useRequest
+
+处理好友请求、入群请求等平台侧申请。
+
+```typescript
+const [request] = useRequest();
+
+await request.friend({ flag: 'friend-flag', approve: true, remark: '备注' });
+await request.guild({ flag: 'guild-flag', subType: 'add', approve: true, reason: '同意入群' });
 ```
 
 ## 透传客户端
 
+`useClient` 用于调用平台特有 API。仅在业务必须依赖平台原生能力、且通用 hooks 不够表达时使用。
+
 ```typescript
-const [client] = useClient<PlatformAPI>();
-await client.api.use.send(params);
+import { API, platform } from '@alemonjs/qq-bot';
+import { useClient, useEvent } from 'alemonjs';
+
+export default () => {
+  const [event] = useEvent();
+
+  if (event.current.Platform === platform) {
+    const [client] = useClient(API);
+    client.usersMe();
+  }
+};
 ```
+
+推荐：
+
+- 先判断平台，再调用对应平台 API
+- 平台特有逻辑收敛到适配器层或独立 service，不散落在业务 handler
 
 ## 主动消息
 
+需要脱离当前响应上下文主动发消息时，可使用 `MessageDirect.create()`。
+
 ```typescript
 const direct = MessageDirect.create();
-await direct.sendToChannel({ SpaceId, format, replyId? });
-await direct.sendToUser({ OpenID, format });
+
+await direct.sendToChannel({ SpaceId: '30001', format });
+await direct.sendToUser({ OpenID: '10001', format });
 ```
 
 ## route 上下文
@@ -144,18 +392,35 @@ await direct.sendToUser({ OpenID, format });
 命令通过 Router DSL 命中后，可直接从事件上拿到路由上下文：
 
 ```typescript
-event.__route?.key;
-event.__route?.text;
-event.__route?.rawArgs;
-event.__route?.parsedArgs;
-event.__route?.params;
+event.current.__route?.key;
+event.current.__route?.text;
+event.current.__route?.rawArgs;
+event.current.__route?.parsedArgs;
+event.current.__route?.params;
 ```
 
 推荐：
 
 - 不重复解析 `event.MessageText`
 - 不在业务 handler 里自己判断前缀
-- 命令参数优先依赖 `schema + event.__route.params`
+- 命令参数优先依赖 `schema + event.current.__route?.params`
+- 业务里读取命令参数、分页、目标用户、时间范围时，先从 `event.current.__route?.params` 收敛类型
+
+## 执行周期速记
+
+```text
+subscribe(create)
+  -> middleware
+  -> subscribe(mount)
+  -> response
+  -> subscribe(unmount)
+```
+
+说明：
+
+- 中间件和订阅都可能影响后续是否继续执行
+- 不调用 `next()` 往往意味着当前链路在此结束
+- 多轮交互时先明确自己挂在哪个周期，再决定是否穿透到后续订阅或后续周期
 
 ## 相关文档
 

@@ -33,10 +33,43 @@ export default defineChildren({
 ## 核心模型
 
 - `Router.create(options)`：创建路由实例并声明默认 `events/platforms`
+- `router.res(config, ...importers)`：注册顶层前置逻辑或纯事件型兜底处理
 - `router.group(options, ...middlewares)`：创建 scope，并给 scope 绑定前缀、中间件、fallback 等规则
 - `group.use(config, ...importers)`：注册命令路径与执行 importer 链
-- `router.res(config, ...importers)`：注册纯事件型响应或兜底处理
 - `router.define`：把 DSL 转成底层 `defineRouter(...)` 可消费结构
+
+## res / group / use 的职责边界
+
+推荐把这三层严格分开。
+
+- `router.res(...)`：只放顶层前置逻辑，如维护模式、统一引导、输入预处理、全局拦截
+- `router.group(...)`：放共享规则，如 `routeText`、共享中间件、fallback、`keyPolicy`、`duplicateKey`
+- `group.use(...)`：只注册具体命令和参数 schema
+
+推荐：
+
+```typescript
+router.res({}, () => import('./response/res-maintenance'));
+
+const appGroup = router.group(
+  {
+    routeText: {
+      prefixes: ['/', '#', '＃', '!', '！'],
+      stripPrefix: true,
+      allowBare: true
+    }
+  },
+  () => import('./middleware/auth')
+);
+
+appGroup.use('help', () => import('./response/help'));
+```
+
+避免：
+
+- 在 `router.res(...)` 里注册具体命令分发
+- 在 `group.use(...)` 里重复声明整组共享规则
+- 把 scope 级别鉴权、频控散落到每个 handler
 
 ## 路由路径
 
@@ -69,6 +102,11 @@ const appGroup = router.group({
 - `allowBare`：是否允许无前缀文本也进入命令匹配
 - `byPlatform`：可按平台覆写前缀规则
 
+补充约束：
+
+- 内部 key 一律不带前缀，前缀归 `routeText` 处理
+- 不要把 `/签到`、`#帮助` 这类字符串直接写进 `group.use(...)`
+
 ## 中间件链
 
 scope 或 route 上都可以挂 importer，执行顺序是声明顺序。
@@ -90,6 +128,11 @@ adminGroup.use('ban', () => import('./response/admin-ban'));
 - `await next()`：进入下一个 importer
 - 返回 `false`：终止链路
 - 不调用 `next` 且返回 `void`：视为当前链路处理完成
+
+补充：
+
+- 顶层 `router.res(...)` 放行依赖 `next()`，不要指望 `return true`
+- 共享中间件优先挂在 `group(...)`，而不是复制到每个 `use(...)`
 
 ## 参数校验
 
@@ -115,11 +158,11 @@ group.use(
 
 - 支持 `string`、`number`、`enum`、`range`、`rest`
 - 校验失败会自动回复错误与 `usage`
-- 解析结果会挂到 `event.__route.params`
+- 解析结果会挂到底层事件对象；业务通过 `useEvent()` 读取时，参数优先从 `event.current.__route?.params` 获取
 
 ## 路由上下文
 
-命中后会把当前命令上下文注入到 `event.__route`：
+命中后会把当前命令上下文注入到底层事件对象的 `__route`：
 
 ```typescript
 {
@@ -131,7 +174,7 @@ group.use(
 }
 ```
 
-业务 handler 优先读取这里，而不是重新解析 `MessageText`。
+业务 handler 通过 `useEvent()` 读取时，优先从 `event.current.__route` 获取这里的上下文，而不是重新解析 `MessageText`。
 
 ## fallback 建议
 
@@ -146,6 +189,20 @@ router.group({
   }
 });
 ```
+
+## keyPolicy / duplicateKey / redispatch
+
+这些选项适合放在 `group(...)`，用于约束整组命令行为。
+
+- `keyPolicy.maxWords`：控制命令 key 提取词数，常见值是 `2`
+- `duplicateKey`：控制重复 key 的处理策略，常见值是 `warn` 或 `throw`
+- `redispatch.maxDepth`：控制重新分发深度，避免递归型链路失控
+
+建议：
+
+- 命令以双词为主的项目，显式配 `keyPolicy: { maxWords: 2 }`
+- 多人维护的大项目，重复 key 默认不静默吞掉
+- 涉及转义、改写命令文本时，再考虑 `redispatch`
 
 ## 旧版 defineRouter 写法
 
@@ -187,25 +244,6 @@ const responseRouter = defineRouter([
 - 单节点内部匹配顺序是 `exact -> prefix -> regular`
 - 节点之间按数组顺序匹配，先命中先执行
 - 常见工程结构是 `middlewareRouter -> responseRouter`
-- handler 一般仍要配合 `useEvent(...).match` 做守卫
-
-## 旧版 handler 守卫
-
-```typescript
-import { useEvent } from 'alemonjs';
-
-export default async () => {
-  const [event, next] = useEvent({
-    selects: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create'],
-    prefix: '/admin '
-  });
-
-  if (!event.match.selects || !event.match.prefix) {
-    next();
-    return;
-  }
-};
-```
 
 ## 兼容说明
 

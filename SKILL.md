@@ -17,11 +17,13 @@ argument-hint: '描述目标功能与场景，如 "加一个可扩展的签到�
 | --- | --- | --- |
 | 架构标准 | [references/architecture.md](./references/architecture.md) | 生命周期、执行链、项目分层 |
 | 路由标准 | [references/routing.md](./references/routing.md) | Router DSL、scope、参数校验、fallback |
-| Hook 标准 | [references/hooks.md](./references/hooks.md) | 常用 hooks 与 `event.__route` 上下文 |
+| Hook 标准 | [references/hooks.md](./references/hooks.md) | 常用 hooks 与 `event.current.__route` 上下文 |
 | 消息标准 | [references/message-format.md](./references/message-format.md) | Format/Markdown/Button 统一写法 |
 | 事件标准 | [references/events.md](./references/events.md) | EventKeys、通用事件字段、路由上下文 |
 | 构建标准 | [references/lvyjs-dev.md](./references/lvyjs-dev.md) | lvyjs 开发/构建/别名/资源 |
 | 图片标准 | [references/jsxp-dev.md](./references/jsxp-dev.md) | jsxp 组件与渲染链路 |
+| 运行时标准 | [references/app-runtime.md](./references/app-runtime.md) | 配置读取、定时任务、热重载清理 |
+| 后端通用 | [references/nodejs-backend.md](./references/nodejs-backend.md) | 时间、校验、错误、配置、并发与日志 |
 
 ## 统一标准写法（默认）
 
@@ -39,6 +41,7 @@ src/
 ### 2. index/router 标准
 
 - 统一入口：`const router = Router.create({ events })`
+- 顶层前置：`router.res(...)` 只放维护模式、统一引导、输入预处理这类入口逻辑
 - 统一分组：`router.group({ routeText })`
 - 统一注册：`group.use('cmd', () => import('./response/cmd'))`
 - 统一导出：`responseRouter: router.define`
@@ -60,7 +63,6 @@ const appGroup = router.group({
   }
 });
 
-appGroup.use('hello', () => import('./response/hello'));
 appGroup.use('help', () => import('./response/help'));
 
 export default defineChildren({
@@ -78,18 +80,20 @@ export default defineChildren({
 
 ### 3. handler 标准
 
-- 统一签名：`export default async (event, next) => {}`
+- 统一签名：`export default async () => {}` 或 `export default async (_event, _next) => {}`
 - 路由命中后默认不需要再手动判断命令名
 - 需要放行后续 importer 时调用 `await next()`
 - 默认返回 `void`；明确终止可返回 `false`
-- 参数与命令上下文优先从 `event.__route` 读取
+- handler 内部读取当前事件时，优先 `const [event, next] = useEvent()` 安全获取上下文
+- 参数与命令上下文优先从 `event.current.__route` 读取
 
 ```typescript
-import { useMessage, Format } from 'alemonjs';
+import { useEvent, useMessage, Format } from 'alemonjs';
 
-export default async (event) => {
+export default () => {
+  const [event] = useEvent();
   const [message] = useMessage();
-  const name = String(event.__route?.params?.name ?? 'world');
+  const name = String(event.current.__route?.params?.name ?? 'world');
 
   await message.send({
     format: Format.create().addText(`hello ${name}`)
@@ -136,17 +140,19 @@ appGroup.use(
 ### 5. 消息标准
 
 - 默认使用 `Format.create()` 构建消息
-- 优先使用 `FormatMarkDown` 构建文本
+- `Format` 是统一消息容器，文本、Markdown、按钮、媒体优先都挂到同一个 `format` 上
+- 按钮推荐写法以官网文档为准：`Format.create().addButtonGroup(Format.createButtonGroup()...)`
+- Markdown 推荐入口是 `Format.createMarkdown()`
 
 ```typescript
-import { Format, FormatButtonGroup, FormatMarkDown } from 'alemonjs';
+import { Format } from 'alemonjs';
 
-const btn = new FormatButtonGroup();
-btn.addRow().addButton('确认', 'ok');
+const md = Format.createMarkdown().addText('说明');
+const bt = Format.createButtonGroup().addRow().addButton('确认', 'ok');
 
-const md = new FormatMarkDown().addText('说明');
-
-const format = Format.create().addMarkdown(md);
+const format = Format.create()
+  .addMarkdown(md)
+  .addButtonGroup(bt);
 ```
 
 ### 6. 构建标准
@@ -203,11 +209,12 @@ export default defineChildren({
 
 1. 定义能力边界：一个 handler 只做一件事
 2. 在 `src/index.ts` 创建 `Router.create({ events })`
-3. 用 `group({ routeText })` 定义命令作用域与前缀规则
-4. 用 `group.use(...)` 注册命令，参数写进 `schema`
-5. 需要鉴权或日志时，把 middleware 作为 importer 串到 group 或 route
-6. 需要交互状态时加 `useSubscribe`
-7. 需要图片输出时接入 jsxp
+3. 用 `router.res(...)` 放顶层前置逻辑，不在这里注册具体命令
+4. 用 `group({ routeText })` 定义命令作用域、共享中间件与前缀规则
+5. 用 `group.use(...)` 注册命令，参数写进 `schema`
+6. 需要鉴权或日志时，把 middleware 作为 importer 串到 group 或 route
+7. 需要交互状态时加 `useSubscribe`
+8. 需要图片输出时接入 jsxp
 
 ## 常用命令
 
@@ -224,6 +231,12 @@ npm run build
 - 不在 handler 顶层写平台分支逻辑，平台差异放适配器层
 - 不把消息拼装散落在多处，统一 `Format` 链式构建
 - 命令参数优先走 `schema` 校验，不手写零散字符串判断
+- 业务内部读取当前事件时，默认优先 `useEvent()`，不要直接依赖 handler 形参上的 `event`
+- 顶层前置逻辑放 `router.res(...)`，共享规则放 `group(...)`，具体命令放 `group.use(...)`
+- 时间逻辑优先使用 `dayjs` 统一处理，先定义时区与边界，再写业务判断
+- 外部输入默认不可信，参数、环境变量、第三方响应都要显式校验和收敛类型
+- 预期错误与系统错误分开处理，给用户的文案和给日志的上下文分开设计
+- 外部 IO 默认加超时和失败预期，涉及重复事件、限额、签到、回调时优先考虑幂等
 
 ## 迁移与兼容
 
@@ -232,6 +245,19 @@ npm run build
 - 旧项目继续保留 `middlewareRouter + responseRouter` 结构是可接受的
 - `createEvent` 迁移到 `useEvent`
 - hooks 默认无参调用，旧写法传 event 仍兼容
+
+## 需要 Node.js 后端常识时
+
+- 时间、时区、冷却、过期、每日刷新：读取 [references/nodejs-backend.md](./references/nodejs-backend.md) 的“时间与时区”
+- 输入校验、schema 边界、环境变量收敛：读取 [references/nodejs-backend.md](./references/nodejs-backend.md) 的“输入校验与类型收敛”“配置与环境变量”
+- 错误处理、日志、外部请求、重试：读取 [references/nodejs-backend.md](./references/nodejs-backend.md) 的“错误处理”“日志与可观测性”“异步 IO 与外部依赖”
+- 签到、次数、库存、订阅状态、重复回调：读取 [references/nodejs-backend.md](./references/nodejs-backend.md) 的“幂等、并发与状态一致性”
+
+## 需要运行时能力时
+
+- 初始化、挂载、异常卸载：读取 [references/architecture.md](./references/architecture.md) 的“应用生命周期钩子”
+- 配置读取、配置监听、配置写回：读取 [references/app-runtime.md](./references/app-runtime.md) 的“配置读取”
+- 定时任务、cron、暂停恢复、自动清理：读取 [references/app-runtime.md](./references/app-runtime.md) 的“框架托管定时任务”
 
 ## 开发结束根据当前环境尝试进行检查
 

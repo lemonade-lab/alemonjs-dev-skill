@@ -57,9 +57,11 @@ selects: [
 
 说明：
 
-- 当事件被 Router DSL 命中时，框架会自动写入 `event.__route`
+- 当事件被 Router DSL 命中时，框架会自动写入底层事件对象的 `__route`
 - `text` 是当前 scope 归一化后的命令文本
 - `params` 来自 `schema` 校验后的命名参数
+
+业务通过 `useEvent()` 读取时，应使用 `event.current.__route` 访问这段上下文。
 
 ## useEvent 标准守卫
 

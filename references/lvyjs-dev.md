@@ -47,6 +47,20 @@ export default defineConfig({
 });
 ```
 
+## 推荐 app.ts 内容
+
+```ts
+import { start } from 'alemonjs';
+import { createServer } from 'jsxp';
+// --jsxp 启动 jsxp 服务
+if (process.argv.includes('--jsxp')) {
+  void createServer();
+} else {
+  // 如果脚本是js写的，用 src/index.js
+  start('src/index.ts');
+}
+```
+
 ## 关键规则
 
 - 静态资源导入返回绝对路径字符串。
