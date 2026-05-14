@@ -1,6 +1,6 @@
 ---
 name: alemonjs-dev-skill
-description: 'AlemonJS 通用开发技能。Use when: 新建或维护大多数 AlemonJS 项目、统一 Router DSL / handler / hooks 写法、处理 useEvent 与 route 上下文、按官网标准组织 Format/Markdown/Button 消息、实现订阅/中间件/配置读取/框架托管定时任务、处理时间与 dayjs、按标准结构组织工程、接入 lvyjs 构建链路。'
+description: 'AlemonJS 通用开发技能。Use when: 新建或维护大多数 AlemonJS 项目、统一 Router DSL / handler / hooks 写法、处理 useEvent / useRoute 与 route 上下文、按官网标准组织 Format/Markdown/Button 消息、实现订阅/中间件/配置读取/框架托管定时任务、处理时间与 dayjs、按标准结构组织工程、接入 lvyjs 构建链路。'
 argument-hint: '描述目标功能与场景，如 "加一个可扩展的签到命令" 或 "统一项目路由和中间件写法"'
 ---
 
@@ -17,7 +17,7 @@ argument-hint: '描述目标功能与场景，如 "加一个可扩展的签到�
 | --- | --- | --- |
 | 架构标准 | [references/architecture.md](./references/architecture.md) | 生命周期、执行链、项目分层 |
 | 路由标准 | [references/routing.md](./references/routing.md) | Router DSL、scope、参数校验、fallback |
-| Hook 标准 | [references/hooks.md](./references/hooks.md) | 常用 hooks 与 `event.current.__route` 上下文 |
+| Hook 标准 | [references/hooks.md](./references/hooks.md) | 常用 hooks 与 `useRoute()` 路由上下文 |
 | 消息标准 | [references/message-format.md](./references/message-format.md) | Format/Markdown/Button 统一写法 |
 | 事件标准 | [references/events.md](./references/events.md) | EventKeys、通用事件字段、路由上下文 |
 | 构建标准 | [references/lvyjs-dev.md](./references/lvyjs-dev.md) | lvyjs 开发/构建/别名/资源 |
@@ -85,15 +85,16 @@ export default defineChildren({
 - 需要放行后续 importer 时调用 `await next()`
 - 默认返回 `void`；明确终止可返回 `false`
 - handler 内部读取当前事件时，优先 `const [event, next] = useEvent()` 安全获取上下文
-- 参数与命令上下文优先从 `event.current.__route` 读取
+- 路由上下文优先 `const [route] = useRoute()` 读取，不直接依赖 `event.current.__route`
 
 ```typescript
-import { useEvent, useMessage, Format } from 'alemonjs';
+import { useEvent, useRoute, useMessage, Format } from 'alemonjs';
 
 export default async () => {
   const [event] = useEvent();
+  const [route] = useRoute();
   const [message] = useMessage();
-  const name = String(event.current.__route?.params?.name ?? 'world');
+  const name = String(route.param('name') ?? 'world');
 
   await message.send({
     format: Format.create().addText(`hello ${name}`)
@@ -232,8 +233,10 @@ npm run build
 - 不把消息拼装散落在多处，统一 `Format` 链式构建
 - 命令参数优先走 `schema` 校验，不手写零散字符串判断
 - 业务内部读取当前事件时，默认优先 `useEvent()`，不要直接依赖 handler 形参上的 `event`
+- 路由上下文默认优先 `useRoute()`，不要在业务里直接依赖内部 `__route` 挂载细节
 - 顶层前置逻辑放 `router.res(...)`，共享规则放 `group(...)`，具体命令放 `group.use(...)`
 - 时间逻辑优先使用 `dayjs` 统一处理，先定义时区与边界，再写业务判断
+- 更高级的插件若管理 Redis 数据，统一使用 `data:AppName` 作为 key 前缀；key 内容允许用 `xxx.yaml` 一类命名表达该 key 对应的数据结构约定
 - 外部输入默认不可信，参数、环境变量、第三方响应都要显式校验和收敛类型
 - 预期错误与系统错误分开处理，给用户的文案和给日志的上下文分开设计
 - 外部 IO 默认加超时和失败预期，涉及重复事件、限额、签到、回调时优先考虑幂等

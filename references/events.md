@@ -28,10 +28,16 @@ selects: [
   UserKey: string;
   IsMaster: boolean;
   IsBot: boolean;
+  IsAtMe: boolean;
+  IsPrivate: boolean;
 
   MessageId: string;
   MessageText: string;
   MessageMedia: any[];
+
+  _sendAttempted?: boolean;
+  _sendSucceeded?: boolean;
+  _lastSendError?: string | null;
 
   SpaceId: string;
   name: EventKeys;
@@ -41,6 +47,12 @@ selects: [
 
 说明：`GuildId/ChannelId/OpenId/ReplyId` 按平台能力选填。
 
+发送状态字段说明：
+
+- `_sendAttempted`：当前事件处理过程中至少尝试过一次 `message.send(...)`
+- `_sendSucceeded`：当前事件处理过程中至少成功发送过一次消息
+- `_lastSendError`：最近一次发送失败的错误信息；若最近一次成功发送，会被置为 `null`
+
 ## route 上下文标准
 
 ```typescript
@@ -48,6 +60,8 @@ selects: [
   __route?: {
     key: string;
     text: string;
+    sourceText?: string;
+    rewrittenText?: string;
     rawArgs: string[];
     parsedArgs: unknown[];
     params: Record<string, unknown>;
@@ -59,9 +73,10 @@ selects: [
 
 - 当事件被 Router DSL 命中时，框架会自动写入底层事件对象的 `__route`
 - `text` 是当前 scope 归一化后的命令文本
+- `sourceText` 是命中前看到的原始命令文本，`rewrittenText` 是路由系统归一化后的文本
 - `params` 来自 `schema` 校验后的命名参数
 
-业务通过 `useEvent()` 读取时，应使用 `event.current.__route` 访问这段上下文。
+业务通过 `useRoute()` 读取时，应优先使用 route 快照，而不是直接依赖 `event.current.__route`。
 
 ## useEvent 标准守卫
 
@@ -80,6 +95,25 @@ if (!event.match.selects) {
 
 - 当前推荐用 `Router.create().group().use()` 做命令匹配
 - `useEvent` 更适合作为事件类型过滤守卫，不再作为主命令路由入口
+
+## useRoute 标准读取
+
+```typescript
+const [route] = useRoute();
+
+if (!route.matched) {
+  return;
+}
+
+const uid = route.param('uid');
+```
+
+说明：
+
+- `useRoute()` 返回路由上下文的只读快照
+- `route.param(name)` 用于读取单个参数
+- `route.params`、`route.rawArgs`、`route.parsedArgs` 可用于批量读取
+- 命令上下文优先走 `useRoute()`，不要让业务代码依赖内部 `__route` 挂载细节
 
 ## 标准化建议
 

@@ -7,6 +7,7 @@
 - 所有 hooks 的 `event` 参数都可选。
 - response handler 内默认依赖 AsyncLocalStorage 自动注入上下文，优先无参调用。
 - 业务代码内部读取当前事件时，默认优先 `const [event, next] = useEvent()`，不要直接依赖 handler 形参上的 `event`。
+- 业务代码内部读取命令上下文时，默认优先 `const [route] = useRoute()`。
 - 非 response 上下文、订阅回调、工具函数中需要显式传入 `event`。
 - 当前推荐把命令匹配交给 `Router.create().group().use()`，hooks 负责读上下文和执行平台动作。
 
@@ -40,10 +41,36 @@ const [event, next] = useEvent({
 
 推荐：
 
-- Router DSL 已命中时，命令名和参数优先从 `event.current.__route` 读取
 - 需要读取 `UserId/GuildId/ChannelId/MessageId` 时，优先从 `event.current` 读取
 - 不把 handler 形参当作默认事件入口，业务内部统一先 `useEvent()`
 - 需要放行旧链路或订阅链路时，再显式调用 `next()`
+
+### useRoute
+
+`useRoute` 用于安全读取当前命令的路由上下文，是读取 `key/text/params/rawArgs/parsedArgs` 的默认入口。
+
+```typescript
+const [route] = useRoute();
+
+if (!route.matched) {
+  return;
+}
+
+const uid = route.param('uid');
+const page = route.param('page');
+```
+
+返回结构分两种：
+
+- 未命中：`matched: false`，其余字段为空快照
+- 已命中：`matched: true`，可读取 `key`、`text`、`sourceText`、`rewrittenText`、`rawArgs`、`parsedArgs`、`params`
+
+推荐：
+
+- 命令参数优先走 `route.param(name)` 或 `route.params`
+- 需要判断某参数是否存在时，用 `route.hasParam(name)`
+- 需要比较原始输入和重写后的命令文本时，读 `sourceText` / `rewrittenText`
+- 不在业务代码里直接依赖 `event.current.__route`
 
 旧版兼容：
 
@@ -95,12 +122,12 @@ await message.get({ messageId? });
 常见搭配：
 
 ```typescript
-import { useEvent, useMessage, Format } from 'alemonjs';
+import { useRoute, useMessage, Format } from 'alemonjs';
 
 export default async () => {
-  const [event] = useEvent();
+  const [route] = useRoute();
   const [message] = useMessage();
-  const uid = String(event.current.__route?.params?.uid ?? '');
+  const uid = String(route.param('uid') ?? '');
 
   await message.send({
     format: Format.create().addText(`uid=${uid}`)
@@ -113,6 +140,19 @@ export default async () => {
 - `send` 可传 `{ format, replyId? }`，也可直接传 `DataEnums[]`
 - 消息发送返回通常是 `Result[]`，一个 `format` 可能被平台拆成多次实际 API 调用
 - 格式降级和平台兼容由框架负责，业务层只构建 `Format`
+- 发送过程会在当前事件上记录 `_sendAttempted`、`_sendSucceeded`、`_lastSendError`
+
+发送状态语义：
+
+- 调用 `message.send(...)` 前，会先把当前事件标记为 `_sendAttempted = true`
+- 只要返回结果里存在任意 `ResultCode.Ok`，会标记 `_sendSucceeded = true`，并把 `_lastSendError = null`
+- 若返回结果全部失败，或发送过程中抛错，会更新 `_lastSendError`
+
+适合用于：
+
+- 判断某个 handler 是否至少尝试过回复
+- 给重试、兜底回复、失败告警提供依据
+- 在复杂链路里避免重复发送
 
 ### useMention
 
@@ -389,22 +429,26 @@ await direct.sendToUser({ OpenID: '10001', format });
 
 ## route 上下文
 
-命令通过 Router DSL 命中后，可直接从事件上拿到路由上下文：
+命令通过 Router DSL 命中后，推荐通过 `useRoute()` 读取路由上下文：
 
 ```typescript
-event.current.__route?.key;
-event.current.__route?.text;
-event.current.__route?.rawArgs;
-event.current.__route?.parsedArgs;
-event.current.__route?.params;
+const [route] = useRoute();
+
+route.key;
+route.text;
+route.sourceText;
+route.rewrittenText;
+route.rawArgs;
+route.parsedArgs;
+route.params;
 ```
 
 推荐：
 
 - 不重复解析 `event.MessageText`
 - 不在业务 handler 里自己判断前缀
-- 命令参数优先依赖 `schema + event.current.__route?.params`
-- 业务里读取命令参数、分页、目标用户、时间范围时，先从 `event.current.__route?.params` 收敛类型
+- 命令参数优先依赖 `schema + useRoute()`
+- 业务里读取命令参数、分页、目标用户、时间范围时，先从 `route.param(name)` 或 `route.params` 收敛类型
 
 ## 执行周期速记
 

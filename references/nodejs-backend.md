@@ -87,19 +87,19 @@ const next = Date.now() + 24 * 60 * 60 * 1000;
 推荐：
 
 ```typescript
-const [event] = useEvent();
+const [route] = useRoute();
 
-const uid = String(event.current.__route?.params?.uid ?? '').trim();
+const uid = String(route.param('uid') ?? '').trim();
 if (!uid) return false;
 
-const page = Number(event.current.__route?.params?.page ?? 1);
+const page = Number(route.param('page') ?? 1);
 if (!Number.isInteger(page) || page < 1 || page > 100) return false;
 ```
 
 避免：
 
 ```typescript
-const page = +event.current.__route?.params?.page || 1;
+const page = +route.param('page') || 1;
 ```
 
 ## 错误处理
@@ -118,13 +118,14 @@ const page = +event.current.__route?.params?.page || 1;
 
 ```typescript
 const [event] = useEvent();
+const [route] = useRoute();
 
 try {
   await service.run(input);
 } catch (error) {
   logger.error({
     err: error,
-    route: event.current.__route?.key,
+    route: route.key,
     userId: event.current.UserId
   }, 'service run failed');
 
@@ -214,6 +215,47 @@ try {
 - 创建时间、更新时间、删除状态要有统一语义。
 - 唯一约束类业务不要只靠代码判断。
 - 批处理优先使用批量接口，不循环单条写入。
+
+## Redis key 约定
+
+若项目使用更高级的插件统一管理 Redis 数据，默认遵循下面的 key 组织规则。
+
+默认规则：
+
+- 应用统一使用 `data:AppName` 作为 key 前缀。
+- key 的业务部分可按模块、用户、场景继续分段，如 `data:my-app:user:10001:profile.yaml`。
+- key 内允许使用 `xxx.yaml` 这类命名，表达该 key 对应的数据结构、字段语义或序列化约定。
+- `xxx.yaml` 是“结构说明式命名”，不要求 Redis 实际存储 YAML 文本；重点是让 key 具备可解释性。
+- 同一应用下，前缀、分段顺序、命名风格保持稳定，不在不同模块里各写一套。
+
+推荐：
+
+```text
+data:my-app:user:10001:profile.yaml
+data:my-app:guild:20001:settings.yaml
+data:my-app:task:daily:state.yaml
+```
+
+适合这样做的场景：
+
+- 需要让 AI 或开发者一眼看懂 key 的业务含义
+- 同一类数据存在固定字段集合，希望用文件名式后缀表达“这是一份什么结构”
+- 多插件、多模块共享 Redis 时，需要避免命名冲突
+
+避免：
+
+```text
+user_10001
+config
+dailyState
+redis:key:1
+```
+
+补充约束：
+
+- 不要把时间戳、随机串放进前缀段，前缀应稳定可聚合
+- 若 key 对应的是列表、集合、哈希等容器，也应保持业务语义优先，再决定存储类型
+- 若存在版本迁移，可在结构名中显式带版本，如 `profile.v2.yaml`
 
 ## 安全基础
 

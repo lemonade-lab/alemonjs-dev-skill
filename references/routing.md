@@ -158,7 +158,7 @@ group.use(
 
 - 支持 `string`、`number`、`enum`、`range`、`rest`
 - 校验失败会自动回复错误与 `usage`
-- 解析结果会挂到底层事件对象；业务通过 `useEvent()` 读取时，参数优先从 `event.current.__route?.params` 获取
+- 解析结果会挂到底层事件对象；业务层推荐通过 `useRoute()` 读取参数，而不是直接依赖内部 `__route` 挂载细节
 
 ## 路由上下文
 
@@ -174,7 +174,7 @@ group.use(
 }
 ```
 
-业务 handler 通过 `useEvent()` 读取时，优先从 `event.current.__route` 获取这里的上下文，而不是重新解析 `MessageText`。
+业务 handler 优先通过 `useRoute()` 获取这里的上下文，而不是重新解析 `MessageText`。
 
 ## fallback 建议
 

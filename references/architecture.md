@@ -71,7 +71,7 @@ export default defineChildren({
 - Router DSL 先做 scope 命令匹配，再执行 importer 链
 - `await next()` 继续链路，`false` 终止链路，`void` 表示当前节点处理完成
 - hooks 默认无参调用，事件上下文由 AsyncLocalStorage 注入
-- 命中结果会写入底层事件对象，业务通过 `useEvent()` 读取时，优先从 `event.current.__route` 访问
+- 命中结果会写入底层事件对象；业务层读取路由上下文时，优先通过 `useRoute()` 获取只读快照
 
 ## 标准工程建议
 
