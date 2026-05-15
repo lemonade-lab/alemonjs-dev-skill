@@ -236,10 +236,20 @@ npm run build
 - 路由上下文默认优先 `useRoute()`，不要在业务里直接依赖内部 `__route` 挂载细节
 - 顶层前置逻辑放 `router.res(...)`，共享规则放 `group(...)`，具体命令放 `group.use(...)`
 - 时间逻辑优先使用 `dayjs` 统一处理，先定义时区与边界，再写业务判断
-- 更高级的插件若管理 Redis 数据，统一使用 `data:AppName` 作为 key 前缀；key 内容允许用 `xxx.yaml` 一类命名表达该 key 对应的数据结构约定
+- 不重要且临时性的存储，统一放进 `.data/AppName/*` 目录，作为本地临时运行数据，不要进入用户配置面
+- 重要且持久化的存储，统一使用 Redis；上线时必须明确提示开启 Redis 持久化
+- Redis 数据统一使用 `data:AppName` 作为 key 前缀；key 名可用 `xxx.yaml` 一类后缀表达数据结构语义
+- 不要使用环境变量或 Redis 保存一般用户手动配置的内容；用户配置统一写入 `alemon.config.yaml`
+- `alemon.config.yaml` 中的用户配置必须挂在应用自己的命名空间下，例如 `AppName:
+    api_key: '2121313'`
+- 默认资源必须交给编译器 direct import，不要在业务层通过 `path.join()`、`new URL(..., import.meta.url)` 或 `fs.readFileSync(path)` 组织默认 YAML / JSON
+- 不要为业务层抽象通用 `appPaths` / `path manager`；业务层应只感知 store key、数据结构、路由上下文
+- 即便是运行时边界层，也优先保留最小相对文件名或 store key，不要把项目目录结构扩散成公共 API
+- 旧目录、旧 key、旧 fallback 文件只能存在于显式迁移层或统一存储层，不应进入正常业务读取链
 - 外部输入默认不可信，参数、环境变量、第三方响应都要显式校验和收敛类型
 - 预期错误与系统错误分开处理，给用户的文案和给日志的上下文分开设计
 - 外部 IO 默认加超时和失败预期，涉及重复事件、限额、签到、回调时优先考虑幂等
+- HTTP / API 请求默认优先使用 `axios`，不要继续新增基于原生 `fetch` 的请求封装；超时、headers、params、拦截器与错误归一化应围绕 `axios` 组织
 
 ## 迁移与兼容
 
