@@ -125,3 +125,11 @@ const uid = route.param('uid');
 
 - Hook 调用标准：[hooks.md](./hooks.md)
 - 路由过滤标准：[routing.md](./routing.md)
+
+## QQ 未映射事件
+
+`@alemonjs/qq-bot@2.1.46` 可通过 WebSocket、签名 Webhook 或 Webhook 的 WebSocket 转发投递 `platform.raw`。已映射的推送继续使用标准事件名。实际投递依赖 QQ 账号权限和订阅。
+
+在 Router 的事件列表和 `router.res({ events: ['platform.raw'] }, importer)` 中明确声明该事件。使用 `useEvent({ selects: 'platform.raw' })` 读取事件，按 `current.Platform === 'qq-bot'` 与 `current.RawEventType` 分流。原始 `value` 类型为 `unknown`，使用前校验字段。`current.BotId` 标识接收的机器人，`current.EventId` 可能缺省。排查缺失时先查平台投递和标准事件映射。
+
+[QQ 事件和订阅示例](https://github.com/lemonade-lab/alemonjs/blob/3b582bf5abfc5af1397274f8d47f5661b4b8be3a/packages/qq-bot/EVENTS.md)

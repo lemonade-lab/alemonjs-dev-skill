@@ -101,11 +101,28 @@ const appGroup = router.group({
 - `stripPrefix`：匹配前是否剥离前缀
 - `allowBare`：是否允许无前缀文本也进入命令匹配
 - `byPlatform`：可按平台覆写前缀规则
+- `space`：在 2.1.124 中默认 `false`，例如 `/修仙签到`。设为 `true` 要求前缀后有空格或 Tab，例如 `/修仙 签到`。升级时按项目已有的指令和按钮显式选择。`byPlatform` 可覆盖该值，`allowBare` 独立控制裸指令。
 
 补充约束：
 
 - 内部 key 一律不带前缀，前缀归 `routeText` 处理
 - 不要把 `/签到`、`#帮助` 这类字符串直接写进 `group.use(...)`
+
+### 应用级前缀和指令按钮
+
+```yaml
+apps:
+  '@example/business':
+    command:
+      prefix: /修仙
+      space: true
+      format:
+        enabled: true
+        match: '^[/#＃!！]\s*'
+        replacement: ''
+```
+
+`apps.<包名>.command` 覆盖 Router、group 和 res 的文本前缀规则。重新分发改写后的 `MessageText` 仍须带完整前缀。`format.enabled` 会转换匹配开头的按钮指令，包括按钮组和结构化 Markdown 的指令按钮。可通过 `commandTarget: false` 保留原指令，或指定目标包名使用另一应用的规则。检查按钮实际发出的文字和路由接受的前缀是否一致。
 
 ## 中间件链
 
@@ -196,7 +213,7 @@ router.group({
 
 - `keyPolicy.maxWords`：控制命令 key 提取词数，常见值是 `2`
 - `duplicateKey`：控制重复 key 的处理策略，常见值是 `warn` 或 `throw`
-- `redispatch.maxDepth`：控制重新分发深度，避免递归型链路失控
+- `redispatch.maxDepth` 是入口的重新分发预算，默认 3，设为 0 时只执行当前处理器。每次重新分发消耗一次，后续分组可收紧剩余预算。
 
 建议：
 

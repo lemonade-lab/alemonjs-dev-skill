@@ -80,3 +80,17 @@ message.send({ format: Format.create().addText('Hello') });
 
 - 业务调用入口：[hooks.md](./hooks.md)
 - 图片卡片规范：[jsxp-dev.md](./jsxp-dev.md)
+
+## 结构化图片和 QQ Markdown 素材
+
+图片来源使用 `Media.image({ url })`、`Media.image({ filePath })` 或 `Media.image({ data, name })`，每次只选一种。可将同一来源交给 `Format.create().addImage(image)` 或 `Format.createMarkdown().addImage(image)`，发送时才按使用位置准备资源。
+
+QQ 普通图片和 Markdown 图片的用途分别是 `message` 与 `markdown`。用 `useMedia()[0].upload({ type: 'image', filePath, usage: 'markdown' })` 提前上传时，先检查返回码再把资源交给 `addImage()`。省略 `usage` 会沿用旧回执接口。只在相同平台、机器人、用途和必要目标范围内复用已上传资源。发送失败时检查 `result.media?.stage` 及 `resources`；准备失败会停止发送，已准备资源可在后续尝试复用。
+
+## QQ 消息兼容性
+
+- Markdown 内联按钮使用 `addButton(title, { data, autoEnter })`，传原始文本。只有 C2C 的 `autoEnter: true` 生成 `qqbot-cmd-enter`，只携带经过属性转义的 `text`。其他会话生成 `qqbot-cmd-input`，指令先按 80 个 UTF-16 单元截断并保留代理对，再分别 URL 编码 `text` 与 `show`。独立按钮键盘走自己的协议。
+- 任务列表、公式和特殊文字样式用 `@alemonjs/qq-bot/markdown` 的 `QQMarkdown` 生成，再通过 `addContent()` 插入。根据会话的 Markdown 权限和客户端能力选择内容。
+- 群聊和文字子频道可通过 `addMention('everyone')` 构造全体提及，权限与次数由 QQ 校验。频道与频道私信的 `usePanel()` 分别使用 `channel` 和 `direct`，两者都使用 `audience: 'all'`。
+
+[QQ 消息格式参考](https://github.com/lemonade-lab/alemonjs/blob/3b582bf5abfc5af1397274f8d47f5661b4b8be3a/packages/qq-bot/MESSAGES.md) · [图片素材参考](https://github.com/lemonade-lab/alemonjs/blob/3b582bf5abfc5af1397274f8d47f5661b4b8be3a/packages/alemonjs/docs/media.md)

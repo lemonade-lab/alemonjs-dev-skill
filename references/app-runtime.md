@@ -36,7 +36,7 @@ console.log(value.port);
 
 推荐：
 
-- 读业务配置时优先 `getConfigValue()`
+- 读取框架全局配置时使用 `getConfigValue()`。读取当前应用配置时使用下节的按包接口。
 - 统一在配置模块里收敛读取，不在多个 handler 里重复取值
 
 ### getConfig
@@ -74,6 +74,43 @@ const unwatch = onWatchConfigValue(value => {
 
 - 对热更新配置、白名单、开关类能力使用监听
 - 需要取消监听时，保存并调用返回的 `unwatch`
+
+## 按包配置和应用顺序
+
+```yaml
+apps:
+  '@example/storage':
+    order: 10
+  '@example/business':
+    enabled: true
+    order: 20
+'@example/business':
+  greeting: '你好'
+```
+
+`apps` 支持布尔值和 `{ enabled, order, command }` 映射，旧的名称数组仍可用。`enabled` 默认 true，`order` 默认取声明位置，从小到大加载，同序号按声明顺序。应用配置内容放在同名顶层节。
+
+`getAppConfigValue<T>()` 返回应用配置，`getAppConfig<T>()` 还提供 `value`、`saveValue()`、`onWatch()`、`reload()` 和 `dispose()`。从调用文件向上找带 `name` 的 `package.json`，查找到当前工作目录为止。定位失败返回空配置并跳过保存。`saveValue()` 替换该应用的整个配置节，`onWatch()` 只通知该节的变更。在 `onDispose()` 清理本应用的监听。
+
+`language: en-US` 切换框架内置提示，默认 `zh-CN`。`withLanguage(language, callback)` 仅覆盖指定回调及其中的异步执行。应用回复由业务自己的文案控制。
+
+## 热加载和启动排查
+
+在机器人应用进程内按已安装的包名调用 `loadAppPackage(name)`、`reloadAppPackage(name)` 或 `unloadAppPackage(name)`。重载和卸载后重新加载需要 Node.js 22.15+ 与 ESM 包，构建完成后再触发。运行时操作即时生效，重启仍按 `apps` 加载。启动时禁用的应用可以手动挂载，框架按 `apps.order` 更新事件处理顺序。
+
+重载会重新导入包内代码，外部依赖继续用现有模块实例。旧应用卸载后，新版完成 `onReady` 才接收事件。初始化失败会抛错并进入 `failed`，修复产物后可再次加载。框架清理登记的路由、订阅、定时任务、上下文和 Expose，应用自建的连接与原生计时器在 `onDispose()` 中清理。
+
+CBP 握手先于应用初始化。发生 `transport_ready_timeout` 时检查主进程或 CBP 服务、连接地址和端口。出现「业务初始化较慢，尚未收到 app_ready」时，检查模块的入口、依赖和生命周期回调。
+
+### QQ 扫码配置
+
+QQ Bot 默认 WebSocket 模式下，缺少完整单机器人凭据且没有 `bots` 项时会发出扫码二维码。扫码授权会重置 AppSecret，旧部署需要更新凭据。认证后适配器将新凭据写入 `alemon.config.yaml` 的 `qq-bot` 节。已授权却再次出现二维码时，检查启动目录、配置文件路径和 `qq-bot` 与 `'@alemonjs/qq-bot'` 的覆盖关系。2.1.46 在有效配置完全未提供账号字段和 `bots` 时，可从原始配置节恢复完整凭据。Webhook 需手动配置。
+
+[QQ 扫码登录参考](https://github.com/lemonade-lab/alemonjs/blob/3b582bf5abfc5af1397274f8d47f5661b4b8be3a/packages/qq-bot/QR_LOGIN.md)
+
+## 发布产物
+
+`alemonc publish` 在临时 Git 工作树构建当前 HEAD，只有已提交内容参与。`--dry-run` 构建并检查产物，在推送之前结束。`--skip-build` 使用已提交的产物。脚本优先级为 `package.json` 的 `alemonjs.build`、`bundle`、`build`。目标为 `release` 或以 `-release` 结尾时，命令将产物和版本标签一起推送。`--branch` 覆盖目标分支，调试时可先用 `--dry-run` 核对。
 
 ## 框架托管定时任务
 
@@ -155,8 +192,7 @@ const all = listSchedule();
 
 ## 默认运行时约束
 
-- 读配置优先走 `getConfigValue()` / `getConfig()`
-- 配置变更监听优先 `onWatchConfigValue()`
+- 读取或监听全局配置使用 `getConfig()` / `onWatchConfigValue()`。包级业务配置使用 `getAppConfig()`。
 - 周期任务优先 `setInterval` / `setCron`
 - 一次性延迟任务优先 `setTimeout`
 - 定时任务、轮询、超时控制默认考虑热重载和自动清理

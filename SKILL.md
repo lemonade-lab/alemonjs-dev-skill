@@ -1,7 +1,6 @@
 ---
 name: alemonjs-dev-skill
-description: 'AlemonJS 通用开发技能。Use when: 新建或维护大多数 AlemonJS 项目、统一 Router DSL / handler / hooks 写法、处理 useEvent / useRoute / 事件上下文、按官网标准组织 Format/Markdown/Button 消息、实现订阅/中间件/HTTP 路由/配置读取/框架托管定时任务、处理时间与 dayjs、按标准结构组织工程、接入 lvyjs 构建链路。'
-argument-hint: '描述目标功能与场景，如 "加一个可扩展的签到命令" 或 "统一项目路由和中间件写法"'
+description: 新建、维护或升级 AlemonJS 机器人与插件，处理 Router DSL、Hook、事件、Format 消息、QQ Bot、Expose、应用运行时、离线测试、HTTP 与 lvyjs 构建。
 ---
 
 # AlemonJS 通用项目技能
@@ -10,6 +9,8 @@ argument-hint: '描述目标功能与场景，如 "加一个可扩展的签到�
 
 当前推荐写法基于 `Router.create().group().use()`，最终通过 `router.define` 挂到 `defineChildren().register()`。
 同时保留旧版 `defineRouter([...])` 参考，用于维护旧项目和迁移场景。
+
+开发或升级前先核对项目实际安装的 `alemonjs`、适配器和 Node.js 版本。以下参考覆盖 `alemonjs@2.1.124` 与 `@alemonjs/qq-bot@2.1.46` 的接口。旧项目按其已安装版本和原有行为维护。
 
 ## 快速导航
 
@@ -25,6 +26,8 @@ argument-hint: '描述目标功能与场景，如 "加一个可扩展的签到�
 | 构建标准 | [references/lvyjs-dev.md](./references/lvyjs-dev.md) | lvyjs 开发/构建/别名/资源 |
 | 图片标准 | [references/jsxp-dev.md](./references/jsxp-dev.md) | jsxp 组件与渲染链路 |
 | 运行时标准 | [references/app-runtime.md](./references/app-runtime.md) | 配置读取、定时任务、热重载清理 |
+| 插件能力 | [references/expose.md](./references/expose.md) | Expose 契约、授权、调用和后台上下文 |
+| 离线测试 | [references/testing.md](./references/testing.md) | 测试真实路由、模拟平台动作和推进框架时钟 |
 | 后端通用 | [references/nodejs-backend.md](./references/nodejs-backend.md) | 时间、校验、错误、配置、并发与日志 |
 
 ## 统一标准写法（默认）
@@ -51,7 +54,6 @@ src/
 
 ```typescript
 import { Router, defineChildren, logger } from 'alemonjs';
-import expose from './expose';
 
 const router = Router.create({
   events: ['message.create', 'private.message.create', 'interaction.create', 'private.interaction.create']
@@ -70,8 +72,7 @@ appGroup.use('help', () => import('./response/help'));
 export default defineChildren({
   register() {
     return {
-      responseRouter: router.define,
-      expose
+      responseRouter: router.define
     };
   },
   onCreated() {
@@ -281,8 +282,7 @@ npm run build
 
 - 先在 [references](./references) 中继续查找最接近主题的文档
 - 若仍无法确认，优先阅读官网文档目录：<https://github.com/lemonade-lab/alemonjs.dev/tree/main/docs>
-- 若问题已经落到 API 行为、返回结构、路由挂载层级、消息构建器源码细节，再阅读框架源码目录：<https://github.com/lemonade-lab/alemonjs/tree/main/packages/alemonjs/src/app>
-- 在继续深入前，可先询问用户是否需要按官网文档或源码进一步核对，再给出结论
+- 需要确认 API 行为、返回结构或兼容性时，查阅实际安装包的类型声明，或对应版本的[框架源码](https://github.com/lemonade-lab/alemonjs/tree/main/packages/alemonjs/src/application)。
 
 ## 开发结束根据当前环境尝试进行检查
 
